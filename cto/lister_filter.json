@@ -1,0 +1,50 @@
+{
+    "C++ vftables": {
+        "regex": true,
+        "cs": false,
+        "rule": "(vftables|`vftable')",
+		"keywords": ["children", "vftables"]
+    },
+    "C++ vftables (non-standard vftable)": {
+        "regex": true,
+        "cs": false,
+        "rule": "const (?!std::).*::`vftable'$",
+		"keywords": []
+    },
+    "Possible C++ class w/o vftable": {
+        "regex": true,
+        "cs": false,
+        "rule": "\\[(r|e)..?(\\+(4|8|0Ch|[0-9A-F][0-9A-F]h|.+))?\\], offset ",
+		"keywords": ["children", "gvars"]
+    },
+    "Possible C++ vftable access on x64": {
+        "regex": true,
+        "cs": false,
+        "rule": "lea     r..?, o",
+		"keywords": ["children", "gvars"]
+    },
+    "xor instruction in a loop": {
+        "regex": false,
+        "cs": false,
+        "rule": "xorloop",
+		"keywords": []
+    },
+    "ironstrings": {
+        "regex": false,
+        "cs": false,
+        "rule": "stackstring: ",
+		"keywords": []
+    },
+    "findcrypt.py": {
+        "regex": true,
+        "cs": true,
+        "rule": "(FC: |FC_)",
+		"keywords": []
+    },
+    "User defined tags": {
+        "regex": false,
+        "cs": true,
+        "rule": "CTO-tag: ",
+		"keywords": []
+    }
+}

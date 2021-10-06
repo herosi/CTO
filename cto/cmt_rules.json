@@ -1,0 +1,22 @@
+{
+    "rcmt": {
+        "default": true,
+        "include": {},
+        "exclude": {
+            "jumptbl": "^(jumptable [0-9A-F]+ (case [0-9-]+|cases [0-9,-]+|default case|default case, cases? [0-9,-]+)\r?\n?)+$"
+        }
+    },
+    "cmt": {
+        "default": false,
+        "include": {
+            "ironstrings": "stackstring: ",
+            "findcrytp.py": "FC: ",
+            "xorloop": "CTO-xorloop",
+            "xor": "CTO-xor",
+            "tag": "CTO-tag: "
+        },
+        "exclude": {
+            "stack cookie": "StackCookie"
+		}
+    }
+}
