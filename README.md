@@ -13,6 +13,12 @@ https://youtu.be/zVCpb82UfFs
 You can also check the presentation at VB2021 localhost.  
 https://vblocalhost.com/presentations/cto-call-tree-overviewer-yet-another-function-call-tree-viewer/
 
+Submitted paper  
+https://vblocalhost.com/uploads/VB2021-Suzuki.pdf
+
+Presentation slides  
+https://vblocalhost.com/uploads/2021/09/VB2021-14.pdf
+
 ## Requirements
 - IDA Pro 7.4 or later (I tested on 7.5 SP3 and 7.6 SP1)
 - Python 3.x (I tested on Python 3.8 and 3.9)
