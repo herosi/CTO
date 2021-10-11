@@ -250,7 +250,7 @@ class MyWidget(QtWidgets.QTreeView):
                 c.installEventFilter(self)
         self.installEventFilter(self)
         
-        # set hooks for incremental search, regex and case sensitive check box state chenged
+        # set hooks for incremental search, regex and case sensitive check box state changed
         self.filter.textChanged.connect(self.setTimer)
         #self.filter.textChanged.connect(self.filterChanged)
         self.regex_box.stateChanged.connect(self.regexBoxChangedAction)
@@ -405,7 +405,7 @@ class MyWidget(QtWidgets.QTreeView):
         self.timer.start(self.wait_msec)
         
     def filterChanged(self, text):
-        #print("Fiter triggered. (%s)" % text)
+        #print("Filter triggered. (%s)" % text)
         
         # if many tree items are expanded, it will take a long time. So Collapes them first.
         self.collapseAll()
@@ -441,7 +441,7 @@ class MyWidget(QtWidgets.QTreeView):
     # https://www.regexpal.com/
     #
     def filterChanged(self, text):
-        #print("Fiter triggered. (%s)" % text)
+        #print("Filter triggered. (%s)" % text)
         
         # if many tree items are expanded, it will take a long time. So Collapes them first.
         self.collapseAll()
@@ -550,7 +550,7 @@ class cto_func_lister_t(cto_base.cto_base, ida_kernwin.PluginForm):
             
             self.delete_idx_in_cache(curr_idx, self.callers, self.caller_ids)
             
-        # remove the index of the target funciton
+        # remove the index of the target function
         if del_itself:
             idx_addr = idx.sibling(idx.row(), 1)
             self.delete_idx_in_cache(idx, self.funcs, self.func_ids)
@@ -999,8 +999,8 @@ class cto_func_lister_t(cto_base.cto_base, ida_kernwin.PluginForm):
                 if name != new_val:
                     item = self.tree.model.itemFromIndex(idx)
                     if name == old_val:
-                        ida_kernwin.msg("Could not rename because of invald name or reserved prefix%s" % os.linesep)
-                        # revert balck to the old val
+                        ida_kernwin.msg("Could not rename because of invalid name or reserved prefix%s" % os.linesep)
+                        # revert back to the old val
                         item.setText(old_val)
                     else:
                         # change the name to modified name that the specific charasters are replaced
@@ -1234,7 +1234,7 @@ D: enable/disable Debug mode
         # shortcut keys for passing to IDA
         self.tree.key_pressed.connect(self.on_key_pressed)
         
-        # processes afer filtering
+        # processes after filtering
         self.tree.after_filtered.connect(self.after_filtered)
         
         # click

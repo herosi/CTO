@@ -78,8 +78,8 @@ class icon_handler(object):
             pixmap = icon_pixmap
         
         if bin_transform:
-            ba = QtCore.QByteArray()
-            buffer = QtCore.QBuffer(ba)
+            byte_array = QtCore.QByteArray()
+            buffer = QtCore.QBuffer(byte_array)
             buffer.open(QtCore.QIODevice.WriteOnly)
             image.save(buffer, 'PNG')
             return buffer.data().data()

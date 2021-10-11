@@ -50,7 +50,7 @@ def find_xor_loop(xor=False, comment=True, rename=False, cmt_prefix="CTO-"):
         ld = loop_detector.loop_detector(func_ea)
         bb = ld.get_bb(ea)
         annotation_type = ""
-        # skip the candidate for xor loop if the basic block is functin start or function end because it is not in a loop.
+        # skip the candidate for xor loop if the basic block is function start or function end because it is not in a loop.
         if len(tuple(bb.preds())) == 0 or len(tuple(bb.succs())) == 0:
             if xor:
                 annotation_type = "xor"

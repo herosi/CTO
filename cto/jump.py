@@ -246,7 +246,7 @@ def jumpto_offset_ida(ea, w):
         x += len(search_key)
         func_name = ida_name.extract_name(curr_line.split(search_key)[1], 0)
         
-        # sometimes missmatch actual function name and and validate name.
+        # sometimes mismatch actual function name and and validate name.
         # to fix it, get name and compare its name with it.
         off_v = ida_xref.get_first_dref_from(ea)
         fn = ida_name.get_name(off_v)

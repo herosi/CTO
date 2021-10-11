@@ -807,7 +807,7 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                     for cmt_ea in self.func_relations[ea]["cmt"]:
                         ar_result.append("%x: %s" % (cmt_ea, self.func_relations[ea]["cmt"][cmt_ea].replace('\r', '\\r').replace('\n', '\\n')))
             else:
-                # for a node refering to a string or a global/static variable
+                # for a node referring to a string or a global/static variable
                 if f and f.start_ea in self.func_relations:
                     if ea in self.func_relations[f.start_ea]["strings"]:
                         ar_result.append("")
@@ -1155,7 +1155,7 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                 r = self.sub_graphs[i].my_view_hooks.unhook()
                 if self.config.debug: self.dbg_print("unhooked my_view_hooks for %s. result: %s%s" % (self.sub_graphs[i].title, str(r), os.linesep))
 
-                # close a debug file if avaiable
+                # close a debug file if available
                 if self.sub_graphs[i].f:
                     fn = self.sub_graphs[i].f.name
                     self.sub_graphs[i].f.close()
@@ -1350,7 +1350,7 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
             else:
                 traceback.print_exc()
         
-    # this action is impremented in viewer hooks. see my_view_hooks_t
+    # this action is implemented in viewer hooks. see my_view_hooks_t
     '''
     def OnClick(self, node_id):
         """
@@ -1494,13 +1494,13 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                             if self.config.debug: self.dbg_print("i: %d, node_ea:%x, loop_ea: %x, additonal_trace_points:%s, related_nodes: %s" % (i, node_ea, ea, str([hex(x).rstrip("L") for x in self.additional_trace_points]), str([hex(x).rstrip("L") for x in self.related_nodes[ea]])))
                             # if the path starts in the midle of the additional trace points, ignore the first node.
                             if first_flag and self.start_ea == start_ea:
-                                # if flag is turned on, remove the additonal tracing point and further ones.
+                                # if flag is turned on, remove the additional tracing point and further ones.
                                 if self.config.debug: self.dbg_print("remove_flag turned on, but it will affect next time")
                                 remove_flag = True
                                 first_flag = False
                                 continue
                             elif node_ea in self.additional_trace_points:
-                                # if flag is turned on, remove the additonal tracing point and further ones.
+                                # if flag is turned on, remove the additional tracing point and further ones.
                                 if self.config.debug: self.dbg_print("remove_flag turned on")
                                 remove_flag = True
                                 #continue
@@ -1548,7 +1548,7 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                                     continue
                             if remove_flag:
                                 if self.config.debug:
-                                    self.dbg_print("to be removed %x from the additonal tracing point list" %ea)
+                                    self.dbg_print("to be removed %x from the additional tracing point list" %ea)
                                 if ea != self.start_ea:
                                     tobe_removed.add(ea)
                                 """
@@ -1561,7 +1561,7 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                                     tobe_removed.add(ea)
                                 """
         """
-        # to be impremented if needed
+        # to be implemented if needed
         # second selection
         if self.config.debug: self.dbg_print("to_be_removed:", str([hex(x) for x in tobe_removed]))
         d = 'up'
@@ -1606,7 +1606,7 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                             flag = False
                             break
                         """
-                        # to be impremented if needed
+                        # to be implemented if needed
                         else:
                             for nid in p:
                                 #if nid in self.additional_trace_points:
@@ -1633,7 +1633,7 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
     
     def _expand_collapse_node(self, node_id):
         """
-        Triggerd when a node is double-clicked.
+        Triggered when a node is double-clicked.
         @return: False to ignore the click and True otherwise
         """
         if self.config.debug:
@@ -1658,7 +1658,7 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
             saved_ea = self.node_ids[next_id]
             # for a filtered out callee
             if self.config.debug:
-                self.dbg_print("next_id:", next_id, ", next_ea:", hex(next_ea).rstrip("L"), ", next_node_ea:", hex(self.node_ids[next_id]).rstrip("L"), ", filtered_nodes:", [hex(x).rstrip("L") for x in self.filtered_nodes], ", additonal trace points:", [hex(x).rstrip("L") for x in self.additional_trace_points], ", exceeded_nodes:", [hex(x).rstrip("L") for x in self.exceeded_nodes])
+                self.dbg_print("next_id:", next_id, ", next_ea:", hex(next_ea).rstrip("L"), ", next_node_ea:", hex(self.node_ids[next_id]).rstrip("L"), ", filtered_nodes:", [hex(x).rstrip("L") for x in self.filtered_nodes], ", additional trace points:", [hex(x).rstrip("L") for x in self.additional_trace_points], ", exceeded_nodes:", [hex(x).rstrip("L") for x in self.exceeded_nodes])
             if next_ea in self.filtered_nodes:
                 callee_or_caller = self.filtered_nodes.pop(next_ea)
                 self.dbg_print("filtered_node_value:", hex(callee_or_caller[0]).rstrip("L"), ". it might be a callee address.")
@@ -1668,7 +1668,7 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                     # I will skip adding additional trace points and updating relationships between those points if the next to ea of the exceeded node is not callee but caller.
                     skip_add_trace_points = True
             
-            # get the exact node id of the callee/caller node and push to to the additonal trace points's queue
+            # get the exact node id of the callee/caller node and push to to the additional trace points's queue
             if not skip_add_trace_points:
                 if next_ea not in self.trace_points_relations:
                     self.trace_points_relations[next_ea] = {"parents":set([]), "children":set([])}
@@ -2065,7 +2065,7 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
 - If you use the shortcuts below, click the background of the call graph window before pushing a
   shortcut key.
 - If the mouse cursor on a node or an edge (a blue arrow), you can see a hint such as the function
-  name, refered strings of the node and the other side node of the edge.
+  name, referred strings of the node and the other side node of the edge.
 - If you see a complete messy nodes layout, right-click on the call graph window and choose
   "Layout graph". It rarely happens, but I do not know how to deal with automatically if it does.
   In that case, please deal with it manually like this way.
@@ -2105,7 +2105,7 @@ Shift+P: Print the hint of a selected node.
 P: enable/disable to show children nodes in Parents.
 I: enable/disable to show unresolved Indirect calls as nodes.
 O: enable/disable to show repeatable cOmments as nodes.
-V: enable/disable to show gobal/static Variables as nodes.
+V: enable/disable to show global/static Variables as nodes.
 Alt+S: enable/disable to show referenced Strings in functions as nodes.
 Shift+T: enable/disable to show sTructure members as nodes.
 Ctrl+X: detect Xor instructions in a loop.
@@ -2250,7 +2250,7 @@ _: print several important internal caches for debugging.
             func_name = ida_name.get_name(ea)
         if not func_name:
             func_name = hex(ea).rstrip("L")
-        # for a func chunk but it's located in a diffrent segment or something like that.
+        # for a func chunk but it's located in a different segment or something like that.
         # it happens in a certain type of packer.
         elif f and ea != f.start_ea:
             func_name = ida_name.get_name(ea)
@@ -2441,7 +2441,7 @@ _: print several important internal caches for debugging.
         
         return bgcolor
         
-    # this is avaiable after drawing. Do not use it before or during drawing process.
+    # this is available after drawing. Do not use it before or during drawing process.
     def _find_src_nodes_from_edges(self, nid, text=""):
         gv = ida_graph.get_graph_viewer(self.GetWidget())
         mg = ida_graph.get_viewer_graph(gv)
@@ -2454,7 +2454,7 @@ _: print several important internal caches for debugging.
             else:
                 yield pred_id
     
-    # this is avaiable after drawing. Do not use it before or during drawing process.
+    # this is available after drawing. Do not use it before or during drawing process.
     def _find_dst_nodes_from_edges(self, nid, text=""):
         gv = ida_graph.get_graph_viewer(self.GetWidget())
         mg = ida_graph.get_viewer_graph(gv)
@@ -3144,7 +3144,7 @@ _: print several important internal caches for debugging.
                                                 insert_flag = False
                                                 src = -1
                                                 if self.config.debug:
-                                                    self.dbg_print("next_callee (%x) is one of the additonal trace points" % next_callee)
+                                                    self.dbg_print("next_callee (%x) is one of the additional trace points" % next_callee)
                                                 pass
                                             else:
                                                 src = -1
@@ -3164,7 +3164,7 @@ _: print several important internal caches for debugging.
                                             insert_flag = False
                                             src = -1
                                             if self.config.debug:
-                                                self.dbg_print("next_callee (%x) is one of the additonal trace points" % next_callee)
+                                                self.dbg_print("next_callee (%x) is one of the additional trace points" % next_callee)
                                         else:
                                             src = -1
                                             if self.config.debug:
@@ -3519,7 +3519,7 @@ _: print several important internal caches for debugging.
                     # for existing nodes (general nodes)
                     elif (prev_callee != caller and caller in self.nodes) or caller in self.caller_nodes:
                     #elif caller in self.nodes:
-                        if self.config.debug: self.dbg_print("caller is alsready existing in nodes list. (caller: %x)" % (caller), prev_callee)
+                        if self.config.debug: self.dbg_print("caller is already existing in nodes list. (caller: %x)" % (caller), prev_callee)
                         if caller in self.caller_nodes:
                             caller_id = self.caller_nodes[caller]
                         else:
@@ -3998,7 +3998,7 @@ _: print several important internal caches for debugging.
         # show the call graph
         r = self.show()
 
-        # if show() is failed or the widget instance does not exsit, do not continue.
+        # if show() is failed or the widget instance does not exist, do not continue.
         if not r:
             ida_kernwin.msg("Failed to display the call tree graph.%s" % (os.linesep))
             self.close()
