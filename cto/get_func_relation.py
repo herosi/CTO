@@ -258,27 +258,28 @@ def get_func_info_by_opstr(ea, opn):
     #           or [eax+struc_1.field_3B4_InternetSetOptionA]
     if opstr.find('.') >= 0 and opstr.find(')') < 0:
         member_names = opstr.split('+')[-1].split('.')[:-1]
-        member_name = member_names.pop()
-        api_name = opstr.split('.')[-1].rstrip(']').strip()
-        """
-        #orig_api_name = api_name
-        struc_name = member_name
-        sid = ida_struct.get_struc_id(struc_name)
-        if len(member_names) == 0:
-            # for stack
-            # e.g. call    [ebp+var_88.GetVersionExA]
-            # e.g. call    [ebp+var_88.struc_2.GetVersionExA]
-            frame = ida_frame.get_frame(ea)
-            if frame.id != ida_idaapi.BADADDR:
-                sid = frame.id
-        #member_offset = idc.get_member_offset(sid, member_name)
-        """
-        func_name, func_type, func_ea = get_func_info_by_name(api_name)
-        if not func_name and api_name.find('_') >= 0 and api_name.startswith("field_"):
-            ar_func_name = api_name.split('_', 2)
-            if len(ar_func_name) > 2:
-                func_name = ar_func_name[2]
-                func_name, func_type, func_ea = get_func_info_by_name(func_name)
+        if len(member_names) > 0:
+            member_name = member_names.pop()
+            api_name = opstr.split('.')[-1].rstrip(']').strip()
+            """
+            #orig_api_name = api_name
+            struc_name = member_name
+            sid = ida_struct.get_struc_id(struc_name)
+            if len(member_names) == 0:
+                # for stack
+                # e.g. call    [ebp+var_88.GetVersionExA]
+                # e.g. call    [ebp+var_88.struc_2.GetVersionExA]
+                frame = ida_frame.get_frame(ea)
+                if frame.id != ida_idaapi.BADADDR:
+                    sid = frame.id
+            #member_offset = idc.get_member_offset(sid, member_name)
+            """
+            func_name, func_type, func_ea = get_func_info_by_name(api_name)
+            if not func_name and api_name.find('_') >= 0 and api_name.startswith("field_"):
+                ar_func_name = api_name.split('_', 2)
+                if len(ar_func_name) > 2:
+                    func_name = ar_func_name[2]
+                    func_name, func_type, func_ea = get_func_info_by_name(func_name)
     # api name in stack offset
     # e.g. call    [ebp+GetVersionExA]
     elif opstr.find('+') >= 0 and opstr.find(')') < 0 and opstr.find('var_') < 0 and opstr.find('h]') < 0:
