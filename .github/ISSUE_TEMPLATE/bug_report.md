@@ -38,6 +38,7 @@ If there is a bug on CTO, please attach the debug log like this way.
  - OS: 
  - IDA Pro version: 
  - python version: 
+ - the architecture of your binary (e.g. x86, x64...):
 
 **Additional context**
 Add any other context about the problem here.
