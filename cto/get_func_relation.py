@@ -917,7 +917,7 @@ def trace_func_calls(func_relations, ea, func_ea=ida_idaapi.BADADDR, target_ea=i
     else:
         if func_ea != ida_idaapi.BADADDR and (func_ea == target_ea or ea == target_ea):
             if debug: dbg_print("got the target!! func_ea: %x, ea: %x" % (func_ea, ea))
-            # if we need to trace beyond the node, we should clear end_ea for additonal tracing points.
+            # if we need to trace beyond the node, we should clear end_ea for additional tracing points.
             #if func_ea in func_relations and len(func_relations[func_ea][direction]) > 0:
             #    result.append((ida_idaapi.BADADDR, ida_idaapi.BADADDR, FT_UNK))
             yield result

@@ -92,12 +92,12 @@ class comment_t(object):
     def chk_filter(self, cmt_type, text):
         default_flag = self.rules[cmt_type]["default"]
         flag = default_flag
-        # if defalut is false, include filter process BEFORE the exclude filter
+        # if default is false, include filter process BEFORE the exclude filter
         if not default_flag and self.is_matched("include", cmt_type, text):
             flag = True
         if self.is_matched("exclude", cmt_type, text):
             flag = False
-        # if defalut is true, include filter process AFTER the exclude filter
+        # if default is true, include filter process AFTER the exclude filter
         if default_flag and self.is_matched("include", cmt_type, text):
             flag = True
         return flag

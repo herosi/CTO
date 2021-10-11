@@ -13,6 +13,12 @@ https://youtu.be/zVCpb82UfFs
 You can also check the presentation at VB2021 localhost.  
 https://vblocalhost.com/presentations/cto-call-tree-overviewer-yet-another-function-call-tree-viewer/
 
+Submitted paper  
+https://vblocalhost.com/uploads/VB2021-Suzuki.pdf
+
+Presentation slides  
+https://vblocalhost.com/uploads/2021/09/VB2021-14.pdf
+
 ## Requirements
 - IDA Pro 7.4 or later (I tested on 7.5 SP3 and 7.6 SP1)
 - Python 3.x (I tested on Python 3.8 and 3.9)
@@ -50,9 +56,9 @@ I'm not a programmer. I'm a malware analyst. Please do not expect product-level 
 PRs are welcome. Just complaining and a bug report without enough information are NOT welcome ;-)
 
 ## Known Issues
-- CTO Function Lister will crash on IDA on Linux for some reasons while it works on Windows. But I can't fix it becahse I don't have that.
+- CTO Function Lister will crash on IDA on Linux for some reasons while it works on Windows. But I can't fix it because I don't have that.
 ```
 QSortFilterProxyModel: index from wrong model passed to mapToSource
 ```
 - Currently, CTO focuses on Intel x64/x86 architecture. If you want to extend other architectures, please send the PR to me.
-- On IDA 7.6 including SP1, you will not be able to use ESC for looking backword location history on CTO’s window because of a bug of IDA. Instead, it will close the CTO window if you press it. I reported the bug and it was fixed internally but not released yet. If you want to use it, you will need a fixed ida*.exe binary. Ask hex-rays support. Please do not ask me.
+- On IDA 7.6 including SP1, you will not be able to use ESC for looking backward location history on CTO’s window because of a bug of IDA. Instead, it will close the CTO window if you press it. I reported the bug and it was fixed internally but not released yet. If you want to use it, you will need a fixed ida*.exe binary. Ask hex-rays support. Please do not ask me.
