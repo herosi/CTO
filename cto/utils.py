@@ -16,7 +16,7 @@ def deep_update(source, overrides):
     """
     for key, value in overrides.items():
         if key in source and type(source[key]) != type(value):
-            print("Error! Couln't merge because the types of source and dest values are different. Key:", key, type(source[key]), type(value)) 
+            print("Error! Couldn't merge because the types of source and dest values are different. Key:", key, type(source[key]), type(value)) 
         elif isinstance(value, colls.Mapping):
             if value:
                 if key in source:
