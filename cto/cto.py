@@ -27,13 +27,13 @@ import tinfo
 import cto_base
 import icon
 import syncui
-import xor_loop_detector
+#import xor_loop_detector
 ida_idaapi.require("get_func_relation")
 ida_idaapi.require("tinfo")
 ida_idaapi.require("cto_base")
 ida_idaapi.require("icon")
 ida_idaapi.require("syncui")
-ida_idaapi.require("xor_loop_detector")
+#ida_idaapi.require("xor_loop_detector")
 
 g_max_recursive = 10
 
@@ -2046,10 +2046,13 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                 ida_kernwin.msg("%d was selected.%s" % (r, os.linesep))
         # detect xor loops
         elif c == 'X' and state == CTRL:
-            for func_ea, ea, annotation_type in xor_loop_detector.find_xor_loop():
-                ida_kernwin.msg("%x: %s, %x: %s%s" % (func_ea, annotation_type, ea, idc.generate_disasm_line(ea, 0), os.linesep))
-            self.cache_cmt_update()
-            self.refresh_all()
+            self.find_xor_loop()
+        # detect notable consts
+        elif c == 'C' and state == CTRL:
+            self.find_notable_const()
+        # detect notable mnems
+        elif c == 'M' and state & (ALT|SHIFT):
+            self.find_notable_mnem()
         
         self.get_focus(self.GetWidget())
         return True
@@ -2109,6 +2112,8 @@ V: enable/disable to show global/static Variables as nodes.
 Alt+S: enable/disable to show referenced Strings in functions as nodes.
 Shift+T: enable/disable to show sTructure members as nodes.
 Ctrl+X: detect Xor instructions in a loop.
+Ctrl+Alt+M: detect several important mnemonics.
+Ctrl+C: detect several important immediate values.
 C: enable/disable Centering the node you are looking at on the call graph window.
 D: enable/disable Debug mode
 _: print several important internal caches for debugging.

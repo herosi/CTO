@@ -29,6 +29,18 @@
         "rule": "xorloop",
 		"keywords": []
     },
+    "notable const value": {
+        "regex": false,
+        "cs": false,
+        "rule": "NT_CON: ",
+		"keywords": []
+    },
+    "notable mnem": {
+        "regex": false,
+        "cs": false,
+        "rule": "NT_MNEM: ",
+		"keywords": []
+    },
     "ironstrings": {
         "regex": false,
         "cs": false,
@@ -39,6 +51,18 @@
         "regex": true,
         "cs": true,
         "rule": "(FC: |FC_)",
+		"keywords": []
+    },
+    "findguid.py": {
+        "regex": true,
+        "cs": true,
+        "rule": "(CLSID_|IID_|FOLDERID_|MEDIASUBTYPE_|WMFORMAT_|WMMEDIATYPE_|WMSCRIPTTYPE_)",
+		"keywords": []
+    },
+    "IDA_Signsrch": {
+        "regex": false,
+        "cs": false,
+        "rule": "#Signsrch ",
 		"keywords": []
     },
     "User defined tags": {

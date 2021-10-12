@@ -1,6 +1,6 @@
 # CTO (Call Tree Overviewer)
 
-CTO (Call Tree Overviewer) is an IDA plugin for creating a simple and efficiant function call tree graph. It can also summarize function information such as internal function calls, API calls, static linked library function calls, unresolved function calls, string references, structure member accesses, specific comments.
+CTO (Call Tree Overviewer) is an IDA plugin for creating a simple and efficiant function call tree graph. It can also summarize function information such as internal function calls, API calls, static linked library function calls, unresolved indirect function calls, string references, structure member accesses, specific comments.
 
 CTO has another helper plugin named "CTO Function Lister", although it can work as a standalone tool. You can think this is an enhanced version of functions window. It lists functions with summarized important information, which is the same as the CTO's one. You can use a regex filter to find nodes with a specific pattern as well.
 
@@ -32,6 +32,12 @@ And use Python 3.x. It should work on Python 2.7 but I did not test enough and I
 
 - findcrypt.py  
   https://github.com/you0708/ida/tree/master/idapython_tools/findcrypt
+
+- findguid.py  
+  https://github.com/herosi/ida/tree/master/idapython_tools/findguid
+
+- IDA_Signsrch  
+  https://sourceforge.net/projects/idasignsrch/
 
 ## How to Install
 See "[INSTALL](/INSTALL)" file.

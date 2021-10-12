@@ -23,6 +23,9 @@ import config_base
 import debug_print
 import comments
 import utils
+import xor_loop_detector
+import notable_mnem_finder
+import notable_const_finder
 
 ida_idaapi.require("get_func_relation")
 ida_idaapi.require("cache_data")
@@ -32,6 +35,9 @@ ida_idaapi.require("config_base")
 ida_idaapi.require("debug_print")
 ida_idaapi.require("comments")
 ida_idaapi.require("utils")
+ida_idaapi.require("xor_loop_detector")
+ida_idaapi.require("notable_mnem_finder")
+ida_idaapi.require("notable_const_finder")
 
 FT_UNK = get_func_relation.FT_UNK
 FT_GEN = get_func_relation.FT_GEN
@@ -643,4 +649,26 @@ class cto_base(debug_print.debug):
             ida_kernwin.msg("%s: %s%s" % (k, str(self.config[k]), os.linesep))
         ida_kernwin.msg("max_depth: %d%s" % (self.max_depth, os.linesep))
         ida_kernwin.msg("start_ea: %x%s" %  (self.start_ea, os.linesep))
-    
+        
+    def find_xor_loop(self):
+        ida_kernwin.msg("Checking XOR instruction in a loop...%s" % (os.linesep))
+        for func_ea, ea, annotation_type in xor_loop_detector.find_xor_loop():
+            ida_kernwin.msg("%x: %s, %x: %s%s" % (func_ea, annotation_type, ea, idc.generate_disasm_line(ea, 0), os.linesep))
+        self.cache_cmt_update()
+        self.refresh_all()
+
+    def find_notable_mnem(self):
+        ida_kernwin.msg("Checking notable mnemonics...%s" % (os.linesep))
+        c = notable_mnem_finder.notable_mnem_t()
+        for ea, mnem_type, dst_ea in c.mnem_handlers():
+            ida_kernwin.msg("%x: %s, %x%s" % (ea, mnem_type, dst_ea, os.linesep))
+        self.cache_cmt_update()
+        self.refresh_all()
+        
+    def find_notable_const(self):
+        ida_kernwin.msg("Checking notable immediate values...%s" % (os.linesep))
+        c = notable_const_finder.notable_const_t()
+        for func_ea, const_ea, val, rule_name in c.collect_notable_consts():
+            ida_kernwin.msg("%x %x, %x, %s%s" % (func_ea, const_ea, val, rule_name, os.linesep))
+        self.cache_cmt_update()
+        self.refresh_all()

@@ -23,11 +23,9 @@ import time
 import cto_base
 import syncui
 import utils
-import xor_loop_detector
 ida_idaapi.require("cto_base")
 ida_idaapi.require("syncui")
 ida_idaapi.require("utils")
-ida_idaapi.require("xor_loop_detector")
 
 if not hasattr(ida_kernwin, "WOPN_NOT_CLOSED_BY_ESC"):
     setattr(ida_kernwin, "WOPN_NOT_CLOSED_BY_ESC", 0x100) # 7.5 lacks the definition
@@ -1136,11 +1134,13 @@ class cto_func_lister_t(cto_base.cto_base, ida_kernwin.PluginForm):
             self.check_xrefs()
         # detect xor loops
         elif c == 'X' and state == CTRL:
-            for func_ea, ea, annotation_type in xor_loop_detector.find_xor_loop():
-                self.update_function(func_ea)
-                ida_kernwin.msg("%x: %s, %x: %s%s" % (func_ea, annotation_type, ea, idc.generate_disasm_line(ea, 0), os.linesep))
-            self.cache_cmt_update()
-            self.refresh_all()
+            self.find_xor_loop()
+        # detect notable consts
+        elif c == 'C' and state == CTRL:
+            self.find_notable_const()
+        # detect notable mnems
+        elif c == 'M' and state & (ALT|SHIFT):
+            self.find_notable_mnem()
         # jump to callee on a caller
         elif key in [ENTER_KEY, RETURN_KEY] and state == 0:
             curr_idx = self.tree.currentIndex()
@@ -1175,6 +1175,8 @@ T: apply a sTructure member to an operand (this option redirects to IDA View-A s
 :: make comment (this option redirects to IDA View-A so that you can use it transparently).
 Alt+P: edit function (this option redirects to IDA View-A so that you can use it transparently).
 Ctrl+X: detect Xor instructions in a loop.
+Ctrl+Alt+M: detect several important mnemonics.
+Ctrl+C: detect several important immediate values.
 ESC: Clear the filter on the filter bar. Move back of the IDA's location history.
 Ctrl+Enter: Move forward  of the IDA's location history.
 Ctrl+F: display/hide Filter bar.
