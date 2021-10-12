@@ -478,14 +478,14 @@ class cto_func_lister_t(cto_base.cto_base, ida_kernwin.PluginForm):
     selected_bg = None
     title = "CTO Function Lister"
     
-    def __init__(self, cto_data=None, debug=False):
+    def __init__(self, cto_data=None, curr_view=None, debug=False):
 
         # wait for auto analysis
         r = ida_auto.auto_wait()
         
         # init super class
         ida_kernwin.PluginForm.__init__(self)
-        cto_base.cto_base.__init__(self, cto_data, debug)
+        cto_base.cto_base.__init__(self, cto_data, curr_view, debug)
 
         self.selected_bg = self.get_selected_bg(0x99999999)
 
@@ -900,11 +900,16 @@ class cto_func_lister_t(cto_base.cto_base, ida_kernwin.PluginForm):
                 func_ea = self.func_ids[func_idx]
                 if func_ea in self.func_relations and keyword in self.func_relations[func_ea] and caller in self.func_relations[func_ea][keyword]:
                     if keyword != "vftables":
-                        callee = self.func_relations[func_ea][keyword][caller][0]
+                        # for comments, it does nothing.
+                        if keyword in ["cmt", "rcmt"]:
+                            callee = ida_idaapi.BADADDR
+                        else:
+                            callee = self.func_relations[func_ea][keyword][caller][0]
                     else:
                         callee = self.func_relations[func_ea][keyword][caller][caller][0]
-                    self.jumpto(callee)
-                    self.expand_item_by_ea(callee)
+                    if callee != ida_idaapi.BADADDR:
+                        self.jumpto(callee)
+                        self.expand_item_by_ea(callee)
             # for children of vftables
             elif idx_key in self.caller_ids:
                 vtbl_func_offset = caller
@@ -1175,7 +1180,7 @@ T: apply a sTructure member to an operand (this option redirects to IDA View-A s
 :: make comment (this option redirects to IDA View-A so that you can use it transparently).
 Alt+P: edit function (this option redirects to IDA View-A so that you can use it transparently).
 Ctrl+X: detect Xor instructions in a loop.
-Ctrl+Alt+M: detect several important mnemonics.
+Alt+Shift+M: detect several important mnemonics.
 Ctrl+C: detect several important immediate values.
 ESC: Clear the filter on the filter bar. Move back of the IDA's location history.
 Ctrl+Enter: Move forward  of the IDA's location history.

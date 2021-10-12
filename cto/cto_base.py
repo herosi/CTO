@@ -50,7 +50,7 @@ FT_VTB = get_func_relation.FT_VTB
 
 class cto_base(debug_print.debug):
     
-    def __init__(self, cto_data=None, debug=False):
+    def __init__(self, cto_data=None, curr_view=None, debug=False):
         #super(cto_base, self).__init__(debug)
         debug_print.debug.__init__(self, debug)
         
@@ -64,9 +64,10 @@ class cto_base(debug_print.debug):
             pass
         
         # get current available widget
-        self.curr_view = None
-        w, wt = self.get_widget()
-        self.curr_view = w
+        self.curr_view = curr_view
+        if self.curr_view is None:
+            w, wt = self.get_widget()
+            self.curr_view = w
         
         # it should be the first instance
         if cto_data is None:

@@ -61,7 +61,7 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
     DO_NOT_SKIP = 0
     SKIP_CHILDREN = 1
     SKIP_PARENTS = 2
-    def __init__(self, start_ea, end_ea=ida_idaapi.BADADDR, max_depth=1, cto_data=None, close_open=True, title_postfix="", parent=None, skip=DO_NOT_SKIP, debug=False, skip_lib=True, skip_api=True):
+    def __init__(self, start_ea, end_ea=ida_idaapi.BADADDR, max_depth=1, cto_data=None, curr_view=None, close_open=True, title_postfix="", parent=None, skip=DO_NOT_SKIP, debug=False, skip_lib=True, skip_api=True):
         # generate title
         self.title = self.orig_title
         if title_postfix:
@@ -96,7 +96,7 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
         self.sub_graphs = []
         
         # init cto base
-        cto_base.cto_base.__init__(self, cto_data, debug)
+        cto_base.cto_base.__init__(self, cto_data, curr_view, debug)
         
         self.parent = None
         if parent and isinstance(parent, CallTreeOverviewer):
@@ -575,7 +575,7 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
 
                                 
                             if exec_flag:
-                                g = CallTreeOverviewer(src_ea, end_ea=dst_ea, max_depth=depth, cto_data=self.v().cto_data, close_open=True, title_postfix="_%x" % node_ea, parent=parent, skip=self.skip, skip_api=skip_api, skip_lib=skip_lib)
+                                g = CallTreeOverviewer(src_ea, end_ea=dst_ea, max_depth=depth, cto_data=self.v().cto_data, curr_view=self.v().curr_view, close_open=True, title_postfix="_%x" % node_ea, parent=parent, skip=self.skip, skip_api=skip_api, skip_lib=skip_lib)
                                 if g and g.parent:
                                     g.parent.sub_graphs.append(g)
         def activate(self, ctx):
@@ -2112,7 +2112,7 @@ V: enable/disable to show global/static Variables as nodes.
 Alt+S: enable/disable to show referenced Strings in functions as nodes.
 Shift+T: enable/disable to show sTructure members as nodes.
 Ctrl+X: detect Xor instructions in a loop.
-Ctrl+Alt+M: detect several important mnemonics.
+Alt+Shift+M: detect several important mnemonics.
 Ctrl+C: detect several important immediate values.
 C: enable/disable Centering the node you are looking at on the call graph window.
 D: enable/disable Debug mode
@@ -4045,13 +4045,13 @@ _: print several important internal caches for debugging.
         
         return r
 
-def exec_cto(cto_data=None, debug=False):
+def exec_cto(cto_data=None, curr_view=None, debug=False):
     if debug or ("g_debug" in globals() and g_debug):
         debug = True
     try:
         r = ida_auto.auto_wait()
         if r:
-            cto = CallTreeOverviewer(ida_kernwin.get_screen_ea(), cto_data=cto_data , debug=debug)
+            cto = CallTreeOverviewer(ida_kernwin.get_screen_ea(), cto_data=cto_data, curr_view=curr_view, debug=debug)
         else:
             ida_kernwin.msg("IDA is still in automatic analysis and you have canceled the plugin execution. Do it later again if you need.%s" % (os.linesep))
     except Exception as e:

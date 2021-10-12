@@ -43,7 +43,7 @@ class notable_mnem_t(object):
         op1 = idc.print_operand(ea, 0)
         if op1.startswith("fword ptr "):
             #print("%x, %s, %s" % (ea, idc.print_insn_mnem(ea), op1))
-            return "jump far (possible heaven's door)", ea, idc.BADADDR
+            return "jump far (possible heaven's gate)", ea, idc.BADADDR
         return "", idc.BADADDR, idc.BADADDR
             
     def call_handler(self, ea):
@@ -65,10 +65,10 @@ class notable_mnem_t(object):
                         return "get pc", ea, v
             elif op1.startswith("fword ptr "):
                 #print("%x, %s, %s" % (ea,idc.print_insn_mnem(ea), op1))
-                return "call far (possible heaven's door)", ea, idc.BADADDR
+                return "call far (possible heaven's gate)", ea, idc.BADADDR
         elif op1.startswith("fword ptr "):
             #print("%x, %s, %s" % (ea, idc.print_insn_mnem(ea), op1))
-            return "call far (possible heaven's door)", ea, idc.BADADDR
+            return "call far (possible heaven's gate)", ea, idc.BADADDR
         return "", idc.BADADDR, idc.BADADDR
     
     def retf_handler(self, ea):
@@ -81,13 +81,13 @@ class notable_mnem_t(object):
                         v = idc.get_operand_value(fea, 0)
                         if v == 0x33:
                             #print("%x, %s, %x, %s" % (ea, idc.print_insn_mnem(ea), fea, idc.print_insn_mnem(fea)))
-                            return "possible heaven's door (x86->x64)", ea, fea
+                            return "possible heaven's gate (x86->x64)", ea, fea
                         elif v == 0x23:
                             #print("%x, %s, %x, %s" % (ea, idc.print_insn_mnem(ea), fea, idc.print_insn_mnem(fea)))
-                            return "possible heaven's door (x64->x86)", ea, fea
+                            return "possible heaven's gate (x64->x86)", ea, fea
         
         #print("%x, %s" % (ea, idc.print_insn_mnem(ea)))
-        return "ret far (possible heaven's door)", ea, idc.BADADDR
+        return "ret far (possible heaven's gate)", ea, idc.BADADDR
     
     def fstenv_handler(self, ea):
         #print("%x, %s" % (ea, idc.print_insn_mnem(ea)))
