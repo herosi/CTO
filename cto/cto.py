@@ -1362,7 +1362,7 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
         if not self.force_refresh_flag or ea not in self.cto_data["cto_data"]["internal_caches"]:
             return False
         
-        if self.config.debug: self.dbg_print("Restoreing all internal caches for %x%s" % (ea, os.linesep))
+        if self.config.debug: self.dbg_print("Restoring all internal caches for %x%s" % (ea, os.linesep))
         
         self._nodes = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["_nodes"])
         self._edges = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["_edges"])
