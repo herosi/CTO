@@ -11,7 +11,7 @@ cto_dir = os.path.join(dirpath, "cto")
 if cto_dir not in sys.path:
     sys.path.append(cto_dir)
 
-ida_idaapi.require("cto")
+ida_idaapi.require("cto_base")
 ida_idaapi.require("cto_func_lister")
 ida_idaapi.require("icon")
 ida_idaapi.require("syncdata")
@@ -20,7 +20,7 @@ ida_idaapi.require("qtutils")
 class cto_func_lister_plugin_t(ida_idaapi.plugin_t):
     flags = ida_idaapi.PLUGIN_KEEP
     comment = "CTO Function Lister"
-    toolbar_displayed_name = cto.CallTreeOverviewer.orig_title
+    toolbar_displayed_name = cto_base.cto_base.orig_title
     toolbar_name = toolbar_displayed_name + 'Toolbar'
     wanted_name = comment
     wanted_hotkey = "Alt-Shift-F"
@@ -74,6 +74,17 @@ class cto_func_lister_plugin_t(ida_idaapi.plugin_t):
         ida_kernwin.create_toolbar(self.toolbar_name, self.toolbar_displayed_name)
         ida_kernwin.attach_action_to_toolbar(self.toolbar_name, cto_func_lister_plugin_t.exec_from_toolbar.action_name)
         
+        # install ui hook to enable toolbar later
+        self.ph = qtutils.enable_toolbar_t(self.toolbar_name)
+        
+        # Check if IDA is darkmode or not.
+        # It might fail if the mode is darcula or similar themes
+        # because the window color is the same as the default theme color.
+        # However, it can still distinguish the default and the dark mode.
+        if cto_base.cto_base.is_dark_mode_with_main():
+            ida_kernwin.update_action_icon(cto_func_lister_plugin_t.exec_from_toolbar.action_name, self.act_icon_dark)
+            ida_kernwin.update_action_icon(self.menu_path + self.wanted_name, self.act_icon_dark)
+            
         return self.flags
 
     def exec_cto_func_lister(self):
@@ -111,6 +122,10 @@ class cto_func_lister_plugin_t(ida_idaapi.plugin_t):
             
         # update icon on menu
         act_icon_id = self.act_icon
+        # update icon on menu
+        act_icon_id = self.act_icon
+        if self.g and self.g.config.dark_mode:
+            act_icon_id = self.act_icon_dark
         ida_kernwin.update_action_icon(cto_func_lister_plugin_t.exec_from_toolbar.action_name, act_icon_id)
         ida_kernwin.update_action_icon(self.menu_path + self.wanted_name, act_icon_id)
         

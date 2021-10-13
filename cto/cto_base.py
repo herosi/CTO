@@ -49,6 +49,7 @@ FT_STR = get_func_relation.FT_STR
 FT_VTB = get_func_relation.FT_VTB
 
 class cto_base(debug_print.debug):
+    orig_title = "CTO"
     
     def __init__(self, cto_data=None, curr_view=None, debug=False):
         #super(cto_base, self).__init__(debug)
@@ -125,6 +126,8 @@ class cto_base(debug_print.debug):
             self.show_stroff_nodes = False
             self.show_comment_nodes = False
             self.show_indirect_calls = True
+            self.auto_reload_outside_node = False
+            self.save_caches = False
     
     def dbg_print(self, *msg):
         if self.config.debug:
@@ -163,6 +166,7 @@ class cto_base(debug_print.debug):
         self.cto_data["cto_data"]["opnums"] = get_func_relation.get_opnums(self.cto_data["cto_data"]["func_relations"], "children")
         self.cto_data["cto_data"]["eps"] = list(get_func_relation.get_entry_points())
         self.cto_data["cto_data"]["vtbl_refs"] = get_func_relation.get_vtbl_refs(self.cto_data["cto_data"]["func_relations"])
+        self.cto_data["cto_data"]["internal_caches"] = {}
         
         self.cache_cmt_update()
         
@@ -673,3 +677,85 @@ class cto_base(debug_print.debug):
             ida_kernwin.msg("%x %x, %x, %s%s" % (func_ea, const_ea, val, rule_name, os.linesep))
         self.cache_cmt_update()
         self.refresh_all()
+        
+    def change_widget_icon(self, icon_data=None, bg_change=False, w=None):
+        if icon_data is None:
+            icon_data = self.icon.icon_data
+        if w is None:
+            w = self.GetWidget()
+        return self.icon.change_widget_icon(w, icon_data, bg_change)
+        
+    @staticmethod
+    def get_main_window():
+        try:
+            from PyQt5 import QtWidgets
+        except ImportError:
+            return None
+        
+        widget = QtWidgets.QApplication.activeWindow()
+        QtWidgets.QApplication.focusWidget()
+        for widget in [QtWidgets.QApplication.activeWindow(), QtWidgets.QApplication.focusWidget()] + QtWidgets.QApplication.topLevelWidgets():
+            while widget:
+                if isinstance(widget, QtWidgets.QMainWindow):
+                    break
+                widget = widget.parent()
+            if isinstance(widget, QtWidgets.QMainWindow):
+                return widget
+        return None
+    
+    @staticmethod
+    def _is_dark_mode(bgcolor, threshold=128):
+        if bgcolor >= 0:
+            alpha = bgcolor >> 24
+            bgcolor &= 0xffffff
+            green = bgcolor >> 16
+            blue = (bgcolor >> 8) & 0xff
+            red = bgcolor & 0xff
+            #print("%x, %x, %x, %x, %x" % (bgcolor, green, blue, red, alpha))
+            if green < threshold and blue < threshold and red < threshold:
+                return True
+        return False
+    
+    def is_dark_mode(self, w=None):
+        return is_dark_mode_with_main()
+    
+    @staticmethod
+    def is_dark_mode_with_main():
+        try:
+            from PyQt5 import QtWidgets
+        except ImportError:
+            return False
+
+        widget = cto_base.get_main_window()
+        if not isinstance(widget, QtWidgets.QMainWindow):
+            return False
+        bgcolor = cto_base.get_bgcolor(x=0, y=0, w=widget)
+        if bgcolor < 0:
+            return False
+        return cto_base._is_dark_mode(bgcolor)
+        
+    @staticmethod
+    def get_bgcolor(x=0, y=0, w=None):
+        bgcolor = -1
+        if w is None:
+            return bgcolor
+        
+        try:
+            import sip
+            from PyQt5 import QtCore
+            from PyQt5 import QtWidgets
+            from PyQt5 import QtGui
+        except ImportError:
+            return bgcolor
+        
+        if str(w).startswith("<Swig Object of type 'TWidget *' at") and str(type(w)) in ["<class 'SwigPyObject'>", "<type 'SwigPyObject'>"]: # type: for py2, class: for py3
+            widget = sip.wrapinstance(int(w), QtWidgets.QWidget)
+        else:
+            widget = w
+            
+        pixmap = widget.grab(QtCore.QRect(x, y, x+1, y+1))
+        image = QtGui.QImage(pixmap.toImage())
+        bgcolor = image.pixel(0, 0)
+        
+        return bgcolor
+        

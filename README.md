@@ -34,7 +34,7 @@ And use Python 3.x. It should work on Python 2.7 but I did not test enough and I
   https://github.com/you0708/ida/tree/master/idapython_tools/findcrypt
 
 - findguid.py  
-  https://github.com/herosi/ida/tree/master/idapython_tools/findguid
+  https://github.com/you0708/ida/tree/master/idapython_tools/findguid
 
 - IDA_Signsrch  
   https://sourceforge.net/projects/idasignsrch/

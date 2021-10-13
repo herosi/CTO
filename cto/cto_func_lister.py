@@ -23,9 +23,11 @@ import time
 import cto_base
 import syncui
 import utils
+import icon
 ida_idaapi.require("cto_base")
 ida_idaapi.require("syncui")
 ida_idaapi.require("utils")
+ida_idaapi.require("icon")
 
 if not hasattr(ida_kernwin, "WOPN_NOT_CLOSED_BY_ESC"):
     setattr(ida_kernwin, "WOPN_NOT_CLOSED_BY_ESC", 0x100) # 7.5 lacks the definition
@@ -256,7 +258,15 @@ class MyWidget(QtWidgets.QTreeView):
         self.state_changed.connect(self.filterChanged)
         self.clear_btn.pressed.connect(self.clear_filter)
         self.h.state_changed.connect(self.change_disabled_keywords)
-
+        
+    # ida clears default button size when the color theme is changed into dark mode.
+    #Is it a bug? I don't know why. To avoid that, call this when dark mode is enabled.
+    def reset_btn_size(self):
+        self.clear_btn.setContentsMargins(0,0,0,0)
+        self.clear_btn.setFixedWidth(25)
+        self.menu_btn.setContentsMargins(0,0,0,0)
+        self.menu_btn.setFixedWidth(20)
+        
     # action for filter preset
     @QtCore.pyqtSlot(str, bool, bool, list)
     def set_filter_rule(self, rule, regex, cs, keywords):
@@ -486,16 +496,41 @@ class cto_func_lister_t(cto_base.cto_base, ida_kernwin.PluginForm):
         # init super class
         ida_kernwin.PluginForm.__init__(self)
         cto_base.cto_base.__init__(self, cto_data, curr_view, debug)
-
+        
+	
+        # Create tree control
+        self.tree = MyWidget()
+        self.model = self.tree.model
+        self.proxy_model = self.tree.proxy_model
+        self.sel_model = self.tree.sel_model
+        
         self.selected_bg = self.get_selected_bg(0x99999999)
-
+        
+        self.icon = icon.icon_handler(icon_data=icon.g_icon_data_ascii, hexify=True)
+        
         # observing "IDA View" or decompiler window
         class my_ui_hooks_t(syncui.my_ui_hooks_t):
             def _log(self, *msg):
                 if self.v().config.debug:
                     self.v().dbg_print(">>> MyUiHook: %s" % " ".join([str(x) for x in msg]))
+                    
             def refresh(self):
                 self.v().refresh(ida_kernwin.get_screen_ea())
+                
+            def chk_dark_mode(self):
+                refresh_flag = False
+                if self.v().is_dark_mode_with_main():
+                    self._log("dark mode is disabled in main window")
+                    if not self.v().config.dark_mode:
+                        self._log("dark mode is disabled in cto's config")
+                        self.v().config.dark_mode = True
+                        self.v().change_widget_icon(bg_change=self.v().config.dark_mode)
+                        self.v().tree.reset_btn_size()
+                else:
+                    if self.v().config.dark_mode:
+                        self.v().config.dark_mode = False
+                        self.v().change_widget_icon(bg_change=self.v().config.dark_mode)
+                return refresh_flag
                 
         class my_view_hooks_t(syncui.my_view_hooks_t):
             def _log(self, *msg):
@@ -1208,12 +1243,13 @@ D: enable/disable Debug mode
         
     def create_tree(self):
         # =================================
-	
+	#"""
         # Create tree control
-        self.tree = MyWidget()
-        self.model = self.tree.model
-        self.proxy_model = self.tree.proxy_model
-        self.sel_model = self.tree.sel_model
+        #self.tree = MyWidget()
+        #self.model = self.tree.model
+        #self.proxy_model = self.tree.proxy_model
+        #self.sel_model = self.tree.sel_model
+        #"""
         
         # =========================
         # build the function list
@@ -1476,6 +1512,11 @@ D: enable/disable Debug mode
             ida_kernwin.display_widget(self.GetWidget(), ida_kernwin.WOPN_NOT_CLOSED_BY_ESC, None)
             
             ida_kernwin.set_dock_pos(self.title, "Functions window", ida_kernwin.DP_TAB)
+            
+        if self.config.dark_mode:
+            self.change_widget_icon(bg_change=self.config.dark_mode)
+            self.tree.reset_btn_size()
+            
         return r
 
 # --------------------------------------------------------------------------

@@ -300,13 +300,15 @@ class my_ui_hooks_t(ida_kernwin.UI_Hooks):
         #if history_clear:
         #    self.clear_history()
         if refresh_flag:
+            self._log("refresh_flag is true. refreshing...")
             #self.refresh()
             self.v().refresh_all(ea)
         #self.v().get_focus(self.v().GetWidget())
         return 0
 
     def refresh(self):
-        self.v().refresh()
+        pass
+        #self.v().refresh()
         
     def update_tif(self, ea, name=None):
         self.v().update_caller_tif(ea, name)

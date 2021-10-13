@@ -11,6 +11,7 @@ cto_dir = os.path.join(dirpath, "cto")
 if cto_dir not in sys.path:
     sys.path.append(cto_dir)
 
+ida_idaapi.require("cto_base")
 ida_idaapi.require("cto")
 ida_idaapi.require("icon")
 ida_idaapi.require("syncdata")
@@ -20,7 +21,7 @@ ida_idaapi.require("qtutils")
 class cto_plugin_t(ida_idaapi.plugin_t):
     flags = ida_idaapi.PLUGIN_KEEP
     comment = "Call Tree Overviewer"
-    toolbar_displayed_name = cto.CallTreeOverviewer.orig_title
+    toolbar_displayed_name = cto_base.cto_base.orig_title
     toolbar_name = toolbar_displayed_name + 'Toolbar'
     wanted_name = cto.CallTreeOverviewer.orig_title
     wanted_hotkey = "Alt-Shift-C"
@@ -81,7 +82,8 @@ class cto_plugin_t(ida_idaapi.plugin_t):
         # It might fail if the mode is darcula or similar themes
         # because the window color is the same as the default theme color.
         # However, it can still distinguish the default and the dark mode.
-        if cto.CallTreeOverviewer.is_dark_mode_with_main():
+        #if cto.CallTreeOverviewer.is_dark_mode_with_main():
+        if cto_base.cto_base.is_dark_mode_with_main():
             ida_kernwin.update_action_icon(cto_plugin_t.exec_from_toolbar.action_name, self.act_icon_dark)
             ida_kernwin.update_action_icon(self.menu_path + self.wanted_name, self.act_icon_dark)
         return self.flags

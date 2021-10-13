@@ -35,6 +35,7 @@ class cache_data(debug_print.debug):
                     self.opnums = {}
                     self.eps = {}
                     self.vtbl_refs = {}
+                    self.internal_caches = {}
                 else:
                     self.func_relations = data_dict['func_relations']
                     self.import_eas = data_dict['import_eas']
@@ -44,6 +45,7 @@ class cache_data(debug_print.debug):
                     self.opnums = data_dict['opnums']
                     self.eps = data_dict['eps']
                     self.vtbl_refs = data_dict["vtbl_refs"]
+                    self.internal_caches = data_dict["internal_caches"]
         
             def __iter__(self):
                 return iter(self.__dict__.keys())
@@ -66,7 +68,7 @@ class cache_data(debug_print.debug):
             if data is None:
                 data = self.data
             import pickle
-            import json
+            #import json
             try:
                 self.lock.acquire()
                 f = open(self.save_name, 'wb')

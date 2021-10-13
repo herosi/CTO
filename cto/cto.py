@@ -20,6 +20,7 @@ import codecs
 import tempfile
 import traceback
 import time
+import copy
 
 # import internal libraries
 import get_func_relation
@@ -70,6 +71,9 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
         # init super class
         ida_graph.GraphViewer.__init__(self, self.title, close_open=close_open)
         
+        # for the first execution, force refresh flag is enable to build from internal caches if the option is enabled.
+        self.force_refresh_flag = True
+        #self.force_refresh_flag = False
         self.skip_children = False
         self.skip_parents = False
         if skip == self.SKIP_CHILDREN:
@@ -82,7 +86,7 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
         self.skip_lib = True
         if not skip_lib:
             self.skip_lib = False
-
+        
         self.icon = icon.icon_handler(icon_data=icon.g_icon_data_ascii, hexify=True)
         
         # basic config
@@ -142,12 +146,16 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                     if not self.v().config.dark_mode:
                         self._log("dark mode is disabled in cto's config")
                         self.v().config.dark_mode = True
-                        refresh_flag = True
+                        self.v().color_settings()
+                        self.v().color_all_nodes()
+                        #refresh_flag = True
                         self.v().change_widget_icon(bg_change=self.v().config.dark_mode)
                 else:
                     if self.v().config.dark_mode:
                         self.v().config.dark_mode = False
-                        refresh_flag = True
+                        self.v().color_settings()
+                        self.v().color_all_nodes()
+                        #refresh_flag = True
                         self.v().change_widget_icon(bg_change=self.v().config.dark_mode)
                 return refresh_flag
             
@@ -176,10 +184,12 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
             
             #def update_widget_b_ea(self, now_ea, was_ea):
             def update_widget_b_ea(self, now_ea, was_ea):
+                if self.v().config.debug:
+                    self._log("now_ea: %x, was_ea: %x" % (now_ea, was_ea))
                 does_use_opn = self.v().does_use_opn()
                 nid = -1
                 
-                # Make sure I are in the same function
+                # Make sure I am in the same function
                 if now_ea in self.v().nodes:
                     nid = self.v().nodes[now_ea]
                     if does_use_opn and now_ea in self.v().caller_nodes:
@@ -191,6 +201,10 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                         ni.frame_color = self.v().selected_frame_color
                         ni.bg_color    = self.v().selected_bg_color
                         self.v().SetNodeInfo(nid, ni, ida_graph.NIF_BG_COLOR|ida_graph.NIF_FRAME_COLOR)
+                # if now_ea is not in ea, and auto reload flag is enabled, then reload and return to draw a new graph based on now_ea.
+                elif self.v().config.auto_reload_outside_node:
+                    self.v().force_reload()
+                    return
                         
                 # remove the previous node frame color
                 if now_ea != was_ea or does_use_opn:
@@ -634,12 +648,38 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
     
     # wrapper for Refresh() that ends up to call OnRefresh() internally.
     def refresh(self, ea=ida_idaapi.BADADDR, center=False):
+        if self.config.debug:
+            callee_stk = inspect.stack()[1]
+            
+            #for python2
+            if isinstance(callee_stk, tuple):
+                frame, filename, lineno, function, source_code, source_index = callee_stk
+            # for python 3
+            else:
+                filename = callee_stk.filename
+                lineno = callee_stk.lineno
+                function = callee_stk.function
+            self.dbg_print("Called from %s:%d" % (function, lineno))
+                
         if center:
             self.refresh_with_center_node(ea)
         else:
             self._refresh(ea)
             
     def _refresh(self, ea=ida_idaapi.BADADDR, center=False):
+        if self.config.debug:
+            callee_stk = inspect.stack()[2]
+            
+            #for python2
+            if isinstance(callee_stk, tuple):
+                frame, filename, lineno, function, source_code, source_index = callee_stk
+            # for python 3
+            else:
+                filename = callee_stk.filename
+                lineno = callee_stk.lineno
+                function = callee_stk.function
+            self.dbg_print("Called from %s:%d" % (function, lineno))
+                
         try:
             t1 = time.time()
             if self.config.debug: self.dbg_print("Refreshing...")
@@ -1120,13 +1160,24 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
     def OnRefresh(self):
         try:
             if self.config.debug: self.dbg_print("OnRefresh() started.")
+            # clear tree state
             self.clear_all_node_infos()
             self.Clear()
-            self.clear_internal_caches(all_clear=False)
+            all_clear_flag = False
+            if self.force_refresh_flag:
+                all_clear_flag = True
+            self.clear_internal_caches(all_clear=all_clear_flag)
             self.color_settings()
-            self.draw_call_tree()
+            if not self.config.save_caches or not self.restore_internal_cache(self.start_ea):
+                self.draw_call_tree()
             self.color_all_nodes()
             if self.config.debug: self.dbg_print("OnRefresh() finished.")
+            
+            # save the internal cache to global variable
+            if self.config.save_caches:
+                self.save_internal_cache(self.start_ea)
+            
+            self.force_refresh_flag = False
         except Exception as e:
             exc_type, exc_obj, tb = sys.exc_info()
             lineno = tb.tb_lineno
@@ -1244,6 +1295,19 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                 self.select(nid)
 
     def refresh_with_center_node(self, ea=ida_idaapi.BADADDR):
+        if self.config.debug:
+            callee_stk = inspect.stack()[1]
+            
+            #for python2
+            if isinstance(callee_stk, tuple):
+                frame, filename, lineno, function, source_code, source_index = callee_stk
+            # for python 3
+            else:
+                filename = callee_stk.filename
+                lineno = callee_stk.lineno
+                function = callee_stk.function
+            self.dbg_print("Called from %s:%d" % (function, lineno))
+                
         try:
             self._refresh_with_center_node(ea)
         except Exception as e:
@@ -1293,8 +1357,64 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
             self.additional_trace_points = {}
             self.filtered_nodes = {}
             self.trace_points_relations = {}
+            
+    def restore_internal_cache(self, ea):
+        if not self.force_refresh_flag or ea not in self.cto_data["cto_data"]["internal_caches"]:
+            return False
+        
+        if self.config.debug: self.dbg_print("Restoreing all internal caches for %x%s" % (ea, os.linesep))
+        
+        self._nodes = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["_nodes"])
+        self._edges = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["_edges"])
+        self.nodes = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["nodes"])
+        self.caller_nodes = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["caller_nodes"])
+        self.exceeded_nodes = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["exceeded_nodes"])
+        self.node_ids = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["node_ids"])
+        self.caller_node_ids = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["caller_node_ids"])
+        self.exceeded_node_ids = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["exceeded_node_ids"])
+        self.related_nodes = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["related_nodes"])
+        self.strings_contents = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["strings_contents"])
+        self.gvars_contents = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["gvars_contents"])
+        self.stroff_contents = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["stroff_contents"])
+        self.unresolved_indirect_calls = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["unresolved_indirect_calls"])
+        self.node_id_relationships = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["node_id_relationships"])
+        self.node_types = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["node_types"])
+        self.additional_trace_points = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["additional_trace_points"])
+        self.filtered_nodes = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["filtered_nodes"])
+        self.trace_points_relations = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["trace_points_relations"])
+        
+        if self.config.debug: self.dbg_print("Restored all internal caches for %x%s" % (ea, os.linesep))
+        return True
+    
+    def save_internal_cache(self, ea):
+        if ea not in self.cto_data["cto_data"]["internal_caches"]:
+            self.cto_data["cto_data"]["internal_caches"][ea] = {}
+            
+        if self.config.debug: self.dbg_print("Saving all internal caches for %x%s" % (ea, os.linesep))
+        
+        self.cto_data["cto_data"]["internal_caches"][ea]["_nodes"] = copy.deepcopy(self._nodes)
+        self.cto_data["cto_data"]["internal_caches"][ea]["_edges"] = copy.deepcopy(self._edges)
+        self.cto_data["cto_data"]["internal_caches"][ea]["nodes"] = copy.deepcopy(self.nodes)
+        self.cto_data["cto_data"]["internal_caches"][ea]["caller_nodes"] = copy.deepcopy(self.caller_nodes)
+        self.cto_data["cto_data"]["internal_caches"][ea]["exceeded_nodes"] = copy.deepcopy(self.exceeded_nodes)
+        self.cto_data["cto_data"]["internal_caches"][ea]["node_ids"] = copy.deepcopy(self.node_ids)
+        self.cto_data["cto_data"]["internal_caches"][ea]["caller_node_ids"] = copy.deepcopy(self.caller_node_ids)
+        self.cto_data["cto_data"]["internal_caches"][ea]["exceeded_node_ids"] = copy.deepcopy(self.exceeded_node_ids)
+        self.cto_data["cto_data"]["internal_caches"][ea]["related_nodes"] = copy.deepcopy(self.related_nodes)
+        self.cto_data["cto_data"]["internal_caches"][ea]["strings_contents"] = copy.deepcopy(self.strings_contents)
+        self.cto_data["cto_data"]["internal_caches"][ea]["gvars_contents"] = copy.deepcopy(self.gvars_contents)
+        self.cto_data["cto_data"]["internal_caches"][ea]["stroff_contents"] = copy.deepcopy(self.stroff_contents)
+        self.cto_data["cto_data"]["internal_caches"][ea]["unresolved_indirect_calls"] = copy.deepcopy(self.unresolved_indirect_calls)
+        self.cto_data["cto_data"]["internal_caches"][ea]["node_id_relationships"] = copy.deepcopy(self.node_id_relationships)
+        self.cto_data["cto_data"]["internal_caches"][ea]["node_types"] = copy.deepcopy(self.node_types)
+        self.cto_data["cto_data"]["internal_caches"][ea]["additional_trace_points"] = copy.deepcopy(self.additional_trace_points)
+        self.cto_data["cto_data"]["internal_caches"][ea]["filtered_nodes"] = copy.deepcopy(self.filtered_nodes)
+        self.cto_data["cto_data"]["internal_caches"][ea]["trace_points_relations"] = copy.deepcopy(self.trace_points_relations)
+        
+        if self.config.debug: self.dbg_print("Saved all internal caches for %x%s" % (ea, os.linesep))
     
     def force_reload(self):
+        self.force_refresh_flag = True
         ea = ida_kernwin.get_screen_ea()
         f = ida_funcs.get_func(ea)
         if f:
@@ -1306,11 +1426,14 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
         ## clear the navigation history to avoid IDA crashes
         #if ea != self.start_ea:
         #    self.exec_ui_action("EmptyStack")
-            
+        
+        # save the internal cache to global variable
+        #self.save_internal_cache(self.start_ea)
+        
         # replace the primary node ea to screen ea.
         self.start_ea = ea
         self.partial_cache_update(ea)
-        self.clear_internal_caches(all_clear=True)
+        #self.clear_internal_caches(all_clear=True)
         self.refresh_with_center_node()
         return True
 
@@ -1737,7 +1860,15 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
             #    self.exec_ui_action("EmptyStack")
         
         if refresh_flag:
+            if saved_ea != ida_idaapi.BADADDR:
+                ea = saved_ea
+                f = ida_funcs.get_func(saved_ea)
+                if f:
+                    ea = f.start_ea
+                if ea in self.func_relations:
+                    self.save_internal_cache(ea)
             self.refresh()
+            
         if saved_ea != ida_idaapi.BADADDR:
             self.jumpto(saved_ea)
             flag = True
@@ -1851,6 +1982,16 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                 ida_kernwin.msg("Force reloaded." + os.linesep)
             else:
                 ida_kernwin.msg("Not reloaded." + os.linesep)
+        # toggle Auto reload option
+        elif c == 'A' and state == ALT:
+            self.config.auto_reload_outside_node = not self.config.auto_reload_outside_node
+            ida_kernwin.msg("Auto-reload option %sabled%s" % ("en" if self.config.auto_reload_outside_node else "dis", os.linesep))
+        # toggle Auto reload option
+        elif c == 'S' and state == SHIFT:
+            self.config.save_caches = not self.config.save_caches
+            ida_kernwin.msg("Save all internal caches option %sabled%s" % ("en" if self.config.save_caches else "dis", os.linesep))
+            if self.config.save_caches:
+                ida_kernwin.msg("This option is an experimental feature. It may cause a problem.%s" % (os.linesep))
         # go to the Start address
         elif c == 'S' and state == 0:
             self.jumpto(self.start_ea)
@@ -2084,6 +2225,8 @@ S: go back to the Start node.
 E: go to the End node (if you specify for finding a path between two points).
 J: Jump to a displayed node with a chooser.
 A: enable/disable displaying cAllers (default is caller/callee mode)
+Alt+A: enable/disable Auto-reload feature which draws a new tree if a user
+       refers to a node outside the current tree. 
 K: enable/disable darK mode.
 -: decrease the number of depth for digging into at once.
 +: increase the number of depth for digging into at once.
@@ -2356,7 +2499,7 @@ _: print several important internal caches for debugging.
         bg_color = self.get_bgcolor(node_tl_x+adjustment, node_tl_y+adjustment, w)
         self.color_node(nid)
         return bg_color
-
+    """
     @staticmethod
     def _is_dark_mode(bgcolor, threshold=128):
         if bgcolor >= 0:
@@ -2369,6 +2512,7 @@ _: print several important internal caches for debugging.
             if green < threshold and blue < threshold and red < threshold:
                 return True
         return False
+    """
     
     def is_dark_mode(self, w=None):
         if w is None:
@@ -2388,6 +2532,7 @@ _: print several important internal caches for debugging.
         bgcolor = self.get_node_default_bgcolor(w)
         return self._is_dark_mode(bgcolor)
         
+    """
     @staticmethod
     def get_main_window():
         try:
@@ -2445,6 +2590,7 @@ _: print several important internal caches for debugging.
         bgcolor = image.pixel(0, 0)
         
         return bgcolor
+    """
         
     # this is available after drawing. Do not use it before or during drawing process.
     def _find_src_nodes_from_edges(self, nid, text=""):
@@ -4036,12 +4182,15 @@ _: print several important internal caches for debugging.
         self.color_all_nodes()
         
         # try to automatically detect dark mode for the first execution
+        prev_dark_mode = self.config.dark_mode
         if self.GetWidget():
             self.config.dark_mode = self.is_dark_mode_with_main()
         else:
             self.config.dark_mode = self.is_dark_mode()
-        self.change_widget_icon(bg_change=self.config.dark_mode)
-        self.refresh()
+        if self.config.dark_mode:
+            self.change_widget_icon(bg_change=self.config.dark_mode)
+        if prev_dark_mode != self.config.dark_mode or self.config.dark_mode:
+            self.refresh()
         
         return r
 
