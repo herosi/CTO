@@ -5,7 +5,7 @@ CTO (Call Tree Overviewer) is an IDA plugin for creating a simple and efficiant 
 CTO has another helper plugin named "CTO Function Lister", although it can work as a standalone tool. You can think this is an enhanced version of functions window. It lists functions with summarized important information, which is the same as the CTO's one. You can use a regex filter to find nodes with a specific pattern as well.
 
 ![CTO-logo](/logo/CTO-Logo-Body.png)
-![CTO-thumnail](/image/cto_thumbnail.png)
+[![Introducing CTO](https://img.youtube.com/vi/zVCpb82UfFs/maxresdefault.jpg)](https://youtu.be/zVCpb82UfFs)
 
 An introduction video is here.  
 https://youtu.be/zVCpb82UfFs
