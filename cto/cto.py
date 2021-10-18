@@ -73,7 +73,10 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
         
         # for the first execution, force refresh flag is enable to build from internal caches if the option is enabled.
         self.force_refresh_flag = True
-        #self.force_refresh_flag = False
+        self.use_internal_function_cache = True
+        self.dont_auto_reload = False
+        self.to_be_saved_ea = ida_idaapi.BADADDR
+        
         self.skip_children = False
         self.skip_parents = False
         if skip == self.SKIP_CHILDREN:
@@ -101,6 +104,9 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
         
         # init cto base
         cto_base.cto_base.__init__(self, cto_data, curr_view, debug)
+        
+        # jump to start ea
+        #self.jumpto(self.start_ea)
         
         self.parent = None
         if parent and isinstance(parent, CallTreeOverviewer):
@@ -137,7 +143,11 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                 
             def clear_history(self):
                 pass
-                #self.v().exec_ui_action("EmptyStack")
+                
+            def refresh(self, ea=ida_idaapi.BADADDR, center=False):
+                self._log("refresh without cache (%x)" % ea, center)
+                self.v().use_internal_function_cache = False
+                self.v().refresh(ea, center)
                 
             def chk_dark_mode(self):
                 refresh_flag = False
@@ -148,17 +158,25 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                         self.v().config.dark_mode = True
                         self.v().color_settings()
                         self.v().color_all_nodes()
-                        #refresh_flag = True
                         self.v().change_widget_icon(bg_change=self.v().config.dark_mode)
                 else:
                     if self.v().config.dark_mode:
                         self.v().config.dark_mode = False
                         self.v().color_settings()
                         self.v().color_all_nodes()
-                        #refresh_flag = True
                         self.v().change_widget_icon(bg_change=self.v().config.dark_mode)
                 return refresh_flag
             
+            def populating_widget_popup(self, w, popup_handle):
+                wida, wt = self.v().get_widget()
+                my_w = self.v().GetWidget()
+                self._log("popup handler is called", wida, my_w, w)
+                if wida and w == wida and my_w:
+                    for skip, act_postfix, direction, direction2 in self.v().pf_args:
+                        actname = "path_finder%s:%s" % (act_postfix, self.v().title)
+                        desc = ida_kernwin.action_desc_t(actname, "Find the path(s) %s this node%s" % (direction, direction2), self.v().path_finder_by_ea(self.v(), skip, actname))
+                        ida_kernwin.attach_dynamic_action_to_popup(w, popup_handle, desc)
+                    
         # observing "IDA View-A" window
         class my_view_hooks_t(syncui.my_view_hooks_t):
             def _log(self, *msg):
@@ -182,12 +200,13 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                         self.v().jumpto(self.v().node_ids[now_node])
                         self.v().get_focus(self.v().GetWidget())
             
-            #def update_widget_b_ea(self, now_ea, was_ea):
             def update_widget_b_ea(self, now_ea, was_ea):
                 if self.v().config.debug:
                     self._log("now_ea: %x, was_ea: %x" % (now_ea, was_ea))
+                    
                 does_use_opn = self.v().does_use_opn()
                 nid = -1
+                f = ida_funcs.get_func(now_ea)
                 
                 # Make sure I am in the same function
                 if now_ea in self.v().nodes:
@@ -202,8 +221,10 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                         ni.bg_color    = self.v().selected_bg_color
                         self.v().SetNodeInfo(nid, ni, ida_graph.NIF_BG_COLOR|ida_graph.NIF_FRAME_COLOR)
                 # if now_ea is not in ea, and auto reload flag is enabled, then reload and return to draw a new graph based on now_ea.
-                elif self.v().config.auto_reload_outside_node:
-                    self.v().force_reload()
+                elif self.v().config.auto_reload_outside_node and (now_ea in self.v().func_relations or f) and not self.v().dont_auto_reload:
+                    if self.v().config.debug:
+                        self._log("auto reloading")
+                    self.v().force_reload(now_ea)
                     return
                         
                 # remove the previous node frame color
@@ -242,11 +263,6 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
         
         # show the graph
         self.show_graph()
-        
-        # remove past navigation history of this graph.
-        #self.exec_ui_action("EmptyStack")
-        
-        #r = self.ph.save_data(self.ph.data)
         
     ###############################################################################
     
@@ -487,6 +503,7 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
             if node_ea != ida_idaapi.BADADDR and self.v().add_cref(node_ea, CallTreeOverviewer.func_chooser_t):
                 self.v().partial_cache_update(node_ea)
                 #self.v().exec_ui_action("EmptyStack")
+                self.v().use_internal_function_cache = False
                 self.v().refresh()
                 ida_kernwin.msg("added the cref to the node." + os.linesep)
             return 1
@@ -503,6 +520,7 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
             if node_ea != ida_idaapi.BADADDR and self.v().del_cref(node_ea, CallTreeOverviewer.cref_chooser_t):
                 self.v().partial_cache_update(node_ea)
                 #self.v().exec_ui_action("EmptyStack")
+                self.v().use_internal_function_cache = False
                 self.v().refresh()
                 ida_kernwin.msg("deleted the cref from the node." + os.linesep)
     
@@ -526,72 +544,80 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                         self.v().select(nid)
                         
             return 1
-
+        
     class path_finder(_base_graph_action_handler_t):
         def __init__(self, g, skip, act_name):
             CallTreeOverviewer._base_graph_action_handler_t.__init__(self, g)
             self.skip = skip
             self.act_name = act_name
             
-        def _activate(self, ctx):
+        def generate_sub_graph(self, node_ea):
+            parent = self.v()
+            if self.v().parent:
+                parent = self.v().parent
+            title = self.v().orig_title + "_%x" % node_ea
+            
+            flag = False
+            for sg in self.v().sub_graphs:
+                if sg.title == title:
+                    flag = True
+                    break
+            if parent.start_ea == node_ea:
+                flag = True
+            
+            if flag:
+                ida_kernwin.msg("%s is already displayed as a subgraph. Close it first.%s" % (title, os.linesep))
+            else:
+                dst_ea = ida_idaapi.BADADDR
+                depth = 1
+                if self.skip == CallTreeOverviewer.SKIP_CHILDREN:
+                    depth = 3
+                    
+                exec_flag = True
+                src_ea = node_ea
+                skip_api = True
+                skip_lib = True
+                if self.act_name.startswith("path_finder_start_end") or self.act_name.startswith("path_finder_end_start") or self.act_name.startswith("path_finder_start_end_skip") or self.act_name.startswith("path_finder_end_start_skip"):
+                    # choosing destination with a chooser
+                    fc = CallTreeOverviewer.func_chooser_t("Choose the destination", self.v())
+                    selected = fc.Show(modal=True)
+                    if selected >= 0:
+                        end_ea, _ = fc.items[selected]
+                        dst_ea = int(end_ea, 16)
+                        depth = -1
+                        skip_api = False
+                        skip_lib = False
+                        if self.act_name.startswith("path_finder_end_start") or self.act_name.startswith("path_finder_end_start_skip"):
+                            _ = dst_ea
+                            dst_ea = src_ea
+                            src_ea = _
+                        if self.act_name.startswith("path_finder_start_end_skip") or self.act_name.startswith("path_finder_end_start_skip"):
+                            skip_api = True
+                            skip_lib = True
+                    else:
+                        exec_flag = False
+                        ida_kernwin.msg("You did not select an address.%s" % (os.linesep))
+                    
+                if exec_flag:
+                    g = CallTreeOverviewer(src_ea, end_ea=dst_ea, max_depth=depth, cto_data=self.v().cto_data, curr_view=self.v().curr_view, close_open=True, title_postfix="_%x" % node_ea, parent=parent, skip=self.skip, skip_api=skip_api, skip_lib=skip_lib)
+                    if g and g.parent:
+                        g.parent.sub_graphs.append(g)
+                        
+        def get_ea(self):
             r = self.v().get_selected_node()
             if r:
                 if len(r) == 1:
                     nid = r[0]
                     if nid in self.v().node_ids:
                         node_ea = self.v().node_ids[nid]
-                        
-                        parent = self.v()
-                        if self.v().parent:
-                            parent = self.v().parent
-                        title = self.v().orig_title + "_%x" % node_ea
-                        
-                        flag = False
-                        for sg in self.v().sub_graphs:
-                            if sg.title == title:
-                                flag = True
-                                break
-                        if parent.start_ea == node_ea:
-                            flag = True
-                        
-                        if flag:
-                            ida_kernwin.msg("%s is already displayed as a subgraph. Close it first.%s" % (title, os.linesep))
-                        else:
-                            dst_ea = ida_idaapi.BADADDR
-                            depth = 1
-                            if self.skip == CallTreeOverviewer.SKIP_CHILDREN:
-                                depth = 3
-
-                            exec_flag = True
-                            src_ea = node_ea
-                            skip_api = True
-                            skip_lib = True
-                            if self.act_name.startswith("path_finder_start_end") or self.act_name.startswith("path_finder_end_start") or self.act_name.startswith("path_finder_start_end_skip") or self.act_name.startswith("path_finder_end_start_skip"):
-                                # choosing destination with a chooser
-                                fc = CallTreeOverviewer.func_chooser_t("Choose the destination", self.v())
-                                selected = fc.Show(modal=True)
-                                if selected >= 0:
-                                    end_ea, _ = fc.items[selected]
-                                    dst_ea = int(end_ea, 16)
-                                    depth = -1
-                                    skip_api = False
-                                    skip_lib = False
-                                    if self.act_name.startswith("path_finder_end_start") or self.act_name.startswith("path_finder_end_start_skip"):
-                                        _ = dst_ea
-                                        dst_ea = src_ea
-                                        src_ea = _
-                                    if self.act_name.startswith("path_finder_start_end_skip") or self.act_name.startswith("path_finder_end_start_skip"):
-                                        skip_api = True
-                                        skip_lib = True
-                                else:
-                                    exec_flag = False
-                                    ida_kernwin.msg("You did not select an address.%s" % (os.linesep))
-
-                                
-                            if exec_flag:
-                                g = CallTreeOverviewer(src_ea, end_ea=dst_ea, max_depth=depth, cto_data=self.v().cto_data, curr_view=self.v().curr_view, close_open=True, title_postfix="_%x" % node_ea, parent=parent, skip=self.skip, skip_api=skip_api, skip_lib=skip_lib)
-                                if g and g.parent:
-                                    g.parent.sub_graphs.append(g)
+                        return node_ea
+            return ida_idaapi.BADADDR
+        
+        def _activate(self, ctx):
+            node_ea = self.get_ea()
+            if node_ea != ida_idaapi.BADADDR:
+                self.generate_sub_graph(node_ea)
+            
         def activate(self, ctx):
             try:
                 self._activate(ctx)
@@ -602,7 +628,11 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                 traceback.print_exc()
                 return 0
             return 1
-
+    
+    class path_finder_by_ea(path_finder):
+        def get_ea(self):
+            return ida_kernwin.get_screen_ea()
+            
     class change_primary_node(_base_graph_action_handler_t):
         def activate(self, ctx):
             r = self.v().get_selected_node()
@@ -617,7 +647,7 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                     self.v().force_reload()
                     ida_kernwin.msg("Change the primary node to %x from %x.%s" % (start_ea, old_start_ea, os.linesep))
             return 1
-
+        
     # wrapper for Show()
     def show(self):
         r = False
@@ -646,6 +676,15 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                 traceback.print_exc()
         return r
     
+    # for all cto instances. It's used for synchronizing renaming and so on.
+    # disable caching here because of changing node state.
+    # that's why cto overrides this method.
+    def refresh_all(self, ea=ida_idaapi.BADADDR, center=False):
+        for inst in self.cto_data['insts']:
+            if isinstance(inst, CallTreeOverviewer):
+                self.inst.use_internal_function_cache = False
+            inst.refresh(ea, center)
+            
     # wrapper for Refresh() that ends up to call OnRefresh() internally.
     def refresh(self, ea=ida_idaapi.BADADDR, center=False):
         if self.config.debug:
@@ -690,7 +729,29 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                 mg = ida_graph.get_viewer_graph(gv)
                 if mg is not None:
                     mg.del_custom_layout()
+                    
+            saved_ea = ida_kernwin.get_screen_ea()
+            use_cache = self.use_internal_function_cache
             self.Refresh()
+            
+            # if it has a subgraph or the parent graph, they need to be refreshed
+            # and select the primary node. Otherwise, IDA will crash if a node
+            # is disappeard in a case such as disablling global nodes.
+            if self.parent:
+                    
+                self.parent.use_internal_function_cache = use_cache
+                self.parent.Refresh()
+                if saved_ea not in self.parent.nodes:
+                    self.parent.select(0)
+                    
+                len_sb = len(self.sub_graphs)
+                for i in reversed(range(len_sb)):
+                    if self.sub_graphs[i].title != self.title:
+                        self.sub_graphs[i].use_internal_function_cache = use_cache
+                        self.sub_graphs[i].Refresh()
+                        if saved_ea not in self.sub_graphs[i].nodes:
+                            self.sub_graphs[i].select(0)
+                
             #self.exec_ui_action("GraphLayout")
             if self.config.debug: self.dbg_print("Refreshed!")
             t2 = time.time()
@@ -703,6 +764,232 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                 self.dbg_print(traceback.format_exc())
             else:
                 traceback.print_exc()
+    
+    def _refresh_with_center_node(self, ea=ida_idaapi.BADADDR):
+        if ea == ida_idaapi.BADADDR:
+            ea = ida_kernwin.get_screen_ea()
+        orig_ea = ea
+        if ea not in self.nodes:
+            f = ida_funcs.get_func(ea)
+            if f:
+                ea = f.start_ea
+            else:
+                ea = self.start_ea
+        else:
+            ea = self.start_ea
+        self._refresh(ea)
+        if orig_ea in self.nodes:
+            ea = orig_ea
+        if ea in self.nodes:
+            nid = self.nodes[ea]
+            if self.config.center_node and not self.is_node_in_canvas(nid):
+                self.do_center_node(nid)
+                self.select(nid)
+            elif nid in self.node_ids:
+                self.select(nid)
+                
+    def refresh_with_center_node(self, ea=ida_idaapi.BADADDR):
+        if self.config.debug:
+            callee_stk = inspect.stack()[1]
+            
+            #for python2
+            if isinstance(callee_stk, tuple):
+                frame, filename, lineno, function, source_code, source_index = callee_stk
+            # for python 3
+            else:
+                filename = callee_stk.filename
+                lineno = callee_stk.lineno
+                function = callee_stk.function
+            self.dbg_print("Called from %s:%d" % (function, lineno))
+                
+        try:
+            self._refresh_with_center_node(ea)
+        except Exception as e:
+            exc_type, exc_obj, tb = sys.exc_info()
+            lineno = tb.tb_lineno
+            ida_kernwin.msg("Got a unexpected error (%s: %s) (%d)%s" % (str(type(e)), e, lineno, os.linesep))
+            if self.config.debug:
+                self.dbg_print(traceback.format_exc())
+            else:
+                traceback.print_exc()
+        
+    def force_reload(self, ea=ida_idaapi.BADADDR):
+        # enable force flag and it is referred in OnRefresh method.
+        self.force_refresh_flag = True
+        
+        # to update the primary ea with the current ea, get the current ea to use later
+        if ea == ida_idaapi.BADADDR:
+            ea = ida_kernwin.get_screen_ea()
+        f = ida_funcs.get_func(ea)
+        if f:
+            ea = f.start_ea
+            
+        if ea != self.start_ea:
+            self.to_be_saved_ea = ea
+            
+        # check if it can reload or not.
+        drefs = list(get_func_relation.get_drefs_to(self.start_ea))
+        if self.start_ea not in self.func_relations and len(drefs) == 0:
+            ida_kernwin.msg("Must be in a function" + os.linesep)
+            return False
+            
+        # replace the primary node ea to screen ea.
+        self.start_ea = ea
+        self.partial_cache_update(ea)
+        self.refresh_with_center_node()
+        return True
+    
+    def OnRefresh(self):
+        try:
+            if self.config.debug: self.dbg_print("OnRefresh() started.")
+            
+            # clear tree state
+            self.clear_all_node_infos()
+            self.Clear()
+            all_clear_flag = False
+            if self.force_refresh_flag:
+                all_clear_flag = True
+            self.clear_internal_caches(all_clear=all_clear_flag)
+            self.color_settings()
+            
+            # get current function's ea
+            ea = ida_kernwin.get_screen_ea()
+            f = ida_funcs.get_func(ea)
+            if f:
+                ea = f.start_ea
+                
+            # get ea to restore
+            restore_ea = self.start_ea
+            if self.force_refresh_flag and self.to_be_saved_ea != ida_idaapi.BADADDR:
+                restore_ea = self.to_be_saved_ea
+            if self.config.debug: self.dbg_print("ea to be refreshed is %x" % restore_ea)
+            
+            # build tree or get past result from cache
+            if not self.config.save_caches or not self.use_internal_function_cache or not self.restore_function_internal_cache(restore_ea):
+                if self.config.debug: self.dbg_print("restoring data from cache was failed. building the tree by tracing", self.config.save_caches, self.use_internal_function_cache)
+                self.draw_call_tree()
+                
+            # color all nodes, for example, the primary node and API/static linked library nodes
+            self.color_all_nodes()
+                
+            # update the cache
+            # do not save data when just refreshing
+            if self.config.save_caches and (self.force_refresh_flag or not self.use_internal_function_cache):
+                if self.to_be_saved_ea != ida_idaapi.BADADDR:
+                   ea = self.to_be_saved_ea
+                self.save_function_internal_cache(ea)
+                
+            # clear flags
+            self.force_refresh_flag = False
+            self.use_internal_function_cache = True
+            self.to_be_saved_ea = ida_idaapi.BADADDR
+            
+            if self.config.debug: self.dbg_print("OnRefresh() finished.")
+            
+        except Exception as e:
+            exc_type, exc_obj, tb = sys.exc_info()
+            lineno = tb.tb_lineno
+            ida_kernwin.msg("Got a unexpected error (%s: %s) (%d)%s" % (str(type(e)), e, lineno, os.linesep))
+            if self.config.debug:
+                self.dbg_print(traceback.format_exc())
+            else:
+                traceback.print_exc()
+            return False
+        return True
+    
+    def clear_internal_caches(self, all_clear=True):
+        self.nodes = {}
+        self.caller_nodes = {}
+        self.exceeded_nodes = {}
+        self.node_ids = {}
+        self.caller_node_ids = {}
+        self.exceeded_node_ids = {}
+        self.related_nodes = {}
+        self.strings_contents = {}
+        self.gvars_contents = {}
+        self.stroff_contents = {}
+        self.unresolved_indirect_calls = {}
+        self.node_id_relationships = {}
+        self.node_types = {}
+        if all_clear:
+            self.additional_trace_points = {}
+            self.filtered_nodes = {}
+            self.trace_points_relations = {}
+            
+    def clear_function_internal_cache(self, ea=ida_idaapi.BADADDR):
+        # clear all caches
+        if ea == ida_idaapi.BADADDR:
+            self.cto_data["cto_data"]["internal_caches"] = {}
+        # clear a function cache
+        elif ea in self.cto_data["cto_data"]["internal_caches"]:
+            self.cto_data["cto_data"]["internal_caches"][ea] = {}
+        
+    def restore_function_internal_cache(self, ea):
+        """
+        if not (self.parent is None or id(self.parent) == id(self)):
+            if self.config.debug: self.dbg_print("restoring was canceled. parent:%d self:%d" % (id(self.parent), id(self)), self.parent)
+            return False
+        """
+        if not self.use_internal_function_cache or ea not in self.cto_data["cto_data"]["internal_caches"] or not self.config.save_caches:
+            if self.config.debug: self.dbg_print("restoring was canceled. use_cache_flag:", self.use_internal_function_cache, "config:", self.config.save_caches)
+            return False
+        
+        if self.config.debug: self.dbg_print("Restoring all internal caches for %x%s" % (ea, os.linesep))
+        
+        self._nodes = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["_nodes"])
+        self._edges = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["_edges"])
+        self.nodes = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["nodes"])
+        self.caller_nodes = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["caller_nodes"])
+        self.exceeded_nodes = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["exceeded_nodes"])
+        self.node_ids = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["node_ids"])
+        self.caller_node_ids = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["caller_node_ids"])
+        self.exceeded_node_ids = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["exceeded_node_ids"])
+        self.related_nodes = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["related_nodes"])
+        self.strings_contents = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["strings_contents"])
+        self.gvars_contents = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["gvars_contents"])
+        self.stroff_contents = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["stroff_contents"])
+        self.unresolved_indirect_calls = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["unresolved_indirect_calls"])
+        self.node_id_relationships = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["node_id_relationships"])
+        self.node_types = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["node_types"])
+        self.additional_trace_points = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["additional_trace_points"])
+        self.filtered_nodes = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["filtered_nodes"])
+        self.trace_points_relations = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["trace_points_relations"])
+        
+        if self.config.debug: self.dbg_print("Restored all internal caches for %x%s" % (ea, os.linesep))
+        return True
+    
+    def save_function_internal_cache(self, ea):
+        if not self.config.save_caches:
+            return False
+        # do not cache if it is a sub graph.
+        if not (self.parent is None or id(self.parent) == id(self)):
+            return False
+            
+        if ea not in self.cto_data["cto_data"]["internal_caches"]:
+            self.cto_data["cto_data"]["internal_caches"][ea] = {}
+            
+        if self.config.debug: self.dbg_print("Saving all internal caches for %x%s" % (ea, os.linesep))
+        
+        self.cto_data["cto_data"]["internal_caches"][ea]["_nodes"] = copy.deepcopy(self._nodes)
+        self.cto_data["cto_data"]["internal_caches"][ea]["_edges"] = copy.deepcopy(self._edges)
+        self.cto_data["cto_data"]["internal_caches"][ea]["nodes"] = copy.deepcopy(self.nodes)
+        self.cto_data["cto_data"]["internal_caches"][ea]["caller_nodes"] = copy.deepcopy(self.caller_nodes)
+        self.cto_data["cto_data"]["internal_caches"][ea]["exceeded_nodes"] = copy.deepcopy(self.exceeded_nodes)
+        self.cto_data["cto_data"]["internal_caches"][ea]["node_ids"] = copy.deepcopy(self.node_ids)
+        self.cto_data["cto_data"]["internal_caches"][ea]["caller_node_ids"] = copy.deepcopy(self.caller_node_ids)
+        self.cto_data["cto_data"]["internal_caches"][ea]["exceeded_node_ids"] = copy.deepcopy(self.exceeded_node_ids)
+        self.cto_data["cto_data"]["internal_caches"][ea]["related_nodes"] = copy.deepcopy(self.related_nodes)
+        self.cto_data["cto_data"]["internal_caches"][ea]["strings_contents"] = copy.deepcopy(self.strings_contents)
+        self.cto_data["cto_data"]["internal_caches"][ea]["gvars_contents"] = copy.deepcopy(self.gvars_contents)
+        self.cto_data["cto_data"]["internal_caches"][ea]["stroff_contents"] = copy.deepcopy(self.stroff_contents)
+        self.cto_data["cto_data"]["internal_caches"][ea]["unresolved_indirect_calls"] = copy.deepcopy(self.unresolved_indirect_calls)
+        self.cto_data["cto_data"]["internal_caches"][ea]["node_id_relationships"] = copy.deepcopy(self.node_id_relationships)
+        self.cto_data["cto_data"]["internal_caches"][ea]["node_types"] = copy.deepcopy(self.node_types)
+        self.cto_data["cto_data"]["internal_caches"][ea]["additional_trace_points"] = copy.deepcopy(self.additional_trace_points)
+        self.cto_data["cto_data"]["internal_caches"][ea]["filtered_nodes"] = copy.deepcopy(self.filtered_nodes)
+        self.cto_data["cto_data"]["internal_caches"][ea]["trace_points_relations"] = copy.deepcopy(self.trace_points_relations)
+        
+        if self.config.debug: self.dbg_print("Saved all internal caches for %x%s" % (ea, os.linesep))
     
     # This method is mandary.
     def OnGetText(self, node_id):
@@ -1024,7 +1311,17 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                 traceback.print_exc()
             return ""
         return x
-        
+    
+    # path_finder's config
+    pf_args = ((SKIP_CHILDREN,  "_skip_children" , "to"     , ""),
+               (SKIP_PARENTS,   "_skip_parents"  , "from"   , ""),
+               (DO_NOT_SKIP,    "_do_not_skip"   , "from/to", ""),
+               (DO_NOT_SKIP,    "_start_end"     , "from"   , " to ... (extremely slow)"),
+               (DO_NOT_SKIP,    "_end_start"     , "to"     , " from ... (extremely slow)"),
+               (DO_NOT_SKIP,    "_start_end_skip", "from"   , " to ... (tracing til libs and APIs) (very slow)"),
+               (DO_NOT_SKIP,    "_end_start_skip", "to"     , " from ... (tracing til libs and APIs) (very slow)"),
+               )
+    
     def popup_dispatcher(self, form, popup_handle):
         # get the selected node
         r = self.get_selected_node()
@@ -1097,15 +1394,7 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                 ida_kernwin.attach_dynamic_action_to_popup(form, popup_handle, desc)
         
         # Path finder
-        pf_args = ((self.SKIP_CHILDREN,  "_skip_children" , "to"     , ""),
-                   (self.SKIP_PARENTS,   "_skip_parents"  , "from"   , ""),
-                   (self.DO_NOT_SKIP,    "_do_not_skip"   , "from/to", ""),
-                   (self.DO_NOT_SKIP,    "_start_end"     , "from"   , " to ... (extremely slow)"),
-                   (self.DO_NOT_SKIP,    "_end_start"     , "to"     , " from ... (extremely slow)"),
-                   (self.DO_NOT_SKIP,    "_start_end_skip", "from"   , " to ... (tracing til libs and APIs) (very slow)"),
-                   (self.DO_NOT_SKIP,    "_end_start_skip", "to"     , " from ... (tracing til libs and APIs) (very slow)"),
-                   )
-        for skip, act_postfix, direction, direction2 in pf_args:
+        for skip, act_postfix, direction, direction2 in self.pf_args:
             actname = "path_finder%s:%s" % (act_postfix, self.title)
             if r and len(r) == 1:
                 nid = r[0]
@@ -1156,40 +1445,7 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
             else:
                 traceback.print_exc()
         return r
-        
-    def OnRefresh(self):
-        try:
-            if self.config.debug: self.dbg_print("OnRefresh() started.")
-            # clear tree state
-            self.clear_all_node_infos()
-            self.Clear()
-            all_clear_flag = False
-            if self.force_refresh_flag:
-                all_clear_flag = True
-            self.clear_internal_caches(all_clear=all_clear_flag)
-            self.color_settings()
-            if not self.config.save_caches or not self.restore_internal_cache(self.start_ea):
-                self.draw_call_tree()
-            self.color_all_nodes()
-            if self.config.debug: self.dbg_print("OnRefresh() finished.")
-            
-            # save the internal cache to global variable
-            if self.config.save_caches:
-                self.save_internal_cache(self.start_ea)
-            
-            self.force_refresh_flag = False
-        except Exception as e:
-            exc_type, exc_obj, tb = sys.exc_info()
-            lineno = tb.tb_lineno
-            ida_kernwin.msg("Got a unexpected error (%s: %s) (%d)%s" % (str(type(e)), e, lineno, os.linesep))
-            if self.config.debug:
-                self.dbg_print(traceback.format_exc())
-            else:
-                traceback.print_exc()
-            return False
-        return True
-
-    # action before quitting
+            # action before quitting
     def _close(self):
         to_be_removed = []
         # for main CTO
@@ -1201,6 +1457,9 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                 # unhook subgraph's hooks
                 # note that it seems that IDA does not wait to finish Close() method of the call graph.
                 # that's why it unhooks them manually here.
+                r = self.sub_graphs[i].ui_hooks_trampoline.unhook()
+                if self.config.debug: self.dbg_print("unhooked ui_hooks_trampoline for %s. result: %s%s" % (self.sub_graphs[i].title, str(r), os.linesep))
+                
                 r = self.sub_graphs[i].my_ui_hooks.unhook()
                 if self.config.debug: self.dbg_print("unhooked my_ui_hooks for %s. result: %s%s" % (self.sub_graphs[i].title, str(r), os.linesep))
                 r = self.sub_graphs[i].my_view_hooks.unhook()
@@ -1230,6 +1489,7 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
         # unhook ui hooks and view hooks
         # I do not need to care about what unhook methods are called twice. it might occur when this method (Close()) is called from a subgraph.
         if self.config.debug: self.dbg_print("Unhooking ui and view hooks for %s%s" % (self.title, os.linesep))
+        self.ui_hooks_trampoline.unhook()
         self.my_ui_hooks.unhook()
         self.my_view_hooks.unhook()
         if self.config.debug: self.dbg_print("Unhooked ui and view hooks for %s%s" % (self.title, os.linesep))
@@ -1272,53 +1532,6 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
         if self.config.debug: self.dbg_print("Quitting %s%s" % (self.title, os.linesep))
         self.close()
     
-    def _refresh_with_center_node(self, ea=ida_idaapi.BADADDR):
-        ea = ida_kernwin.get_screen_ea()
-        orig_ea = ea
-        if ea not in self.nodes:
-            f = ida_funcs.get_func(ea)
-            if f:
-                ea = f.start_ea
-            else:
-                ea = self.start_ea
-        else:
-            ea = self.start_ea
-        self._refresh(ea)
-        if orig_ea in self.nodes:
-            ea = orig_ea
-        if ea in self.nodes:
-            nid = self.nodes[ea]
-            if self.config.center_node and not self.is_node_in_canvas(nid):
-                self.do_center_node(nid)
-                self.select(nid)
-            elif nid in self.node_ids:
-                self.select(nid)
-
-    def refresh_with_center_node(self, ea=ida_idaapi.BADADDR):
-        if self.config.debug:
-            callee_stk = inspect.stack()[1]
-            
-            #for python2
-            if isinstance(callee_stk, tuple):
-                frame, filename, lineno, function, source_code, source_index = callee_stk
-            # for python 3
-            else:
-                filename = callee_stk.filename
-                lineno = callee_stk.lineno
-                function = callee_stk.function
-            self.dbg_print("Called from %s:%d" % (function, lineno))
-                
-        try:
-            self._refresh_with_center_node(ea)
-        except Exception as e:
-            exc_type, exc_obj, tb = sys.exc_info()
-            lineno = tb.tb_lineno
-            ida_kernwin.msg("Got a unexpected error (%s: %s) (%d)%s" % (str(type(e)), e, lineno, os.linesep))
-            if self.config.debug:
-                self.dbg_print(traceback.format_exc())
-            else:
-                traceback.print_exc()
-        
     def print_caches(self):
         ida_kernwin.msg("additona_trace_points: %s%s" % (str([hex(x).rstrip("L") for x in self.additional_trace_points]), os.linesep))
         ida_kernwin.msg("filtered_nodes       : %s%s" % (str([hex(x).rstrip("L") for x in self.filtered_nodes]), os.linesep))
@@ -1339,104 +1552,6 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
         ida_kernwin.msg("node_id_relationships: " + os.linesep)
         pp.pprint(self.node_id_relationships)
     
-    def clear_internal_caches(self, all_clear=True):
-        self.nodes = {}
-        self.caller_nodes = {}
-        self.exceeded_nodes = {}
-        self.node_ids = {}
-        self.caller_node_ids = {}
-        self.exceeded_node_ids = {}
-        self.related_nodes = {}
-        self.strings_contents = {}
-        self.gvars_contents = {}
-        self.stroff_contents = {}
-        self.unresolved_indirect_calls = {}
-        self.node_id_relationships = {}
-        self.node_types = {}
-        if all_clear:
-            self.additional_trace_points = {}
-            self.filtered_nodes = {}
-            self.trace_points_relations = {}
-            
-    def restore_internal_cache(self, ea):
-        if not self.force_refresh_flag or ea not in self.cto_data["cto_data"]["internal_caches"]:
-            return False
-        
-        if self.config.debug: self.dbg_print("Restoring all internal caches for %x%s" % (ea, os.linesep))
-        
-        self._nodes = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["_nodes"])
-        self._edges = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["_edges"])
-        self.nodes = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["nodes"])
-        self.caller_nodes = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["caller_nodes"])
-        self.exceeded_nodes = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["exceeded_nodes"])
-        self.node_ids = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["node_ids"])
-        self.caller_node_ids = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["caller_node_ids"])
-        self.exceeded_node_ids = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["exceeded_node_ids"])
-        self.related_nodes = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["related_nodes"])
-        self.strings_contents = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["strings_contents"])
-        self.gvars_contents = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["gvars_contents"])
-        self.stroff_contents = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["stroff_contents"])
-        self.unresolved_indirect_calls = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["unresolved_indirect_calls"])
-        self.node_id_relationships = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["node_id_relationships"])
-        self.node_types = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["node_types"])
-        self.additional_trace_points = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["additional_trace_points"])
-        self.filtered_nodes = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["filtered_nodes"])
-        self.trace_points_relations = copy.deepcopy(self.cto_data["cto_data"]["internal_caches"][ea]["trace_points_relations"])
-        
-        if self.config.debug: self.dbg_print("Restored all internal caches for %x%s" % (ea, os.linesep))
-        return True
-    
-    def save_internal_cache(self, ea):
-        if ea not in self.cto_data["cto_data"]["internal_caches"]:
-            self.cto_data["cto_data"]["internal_caches"][ea] = {}
-            
-        if self.config.debug: self.dbg_print("Saving all internal caches for %x%s" % (ea, os.linesep))
-        
-        self.cto_data["cto_data"]["internal_caches"][ea]["_nodes"] = copy.deepcopy(self._nodes)
-        self.cto_data["cto_data"]["internal_caches"][ea]["_edges"] = copy.deepcopy(self._edges)
-        self.cto_data["cto_data"]["internal_caches"][ea]["nodes"] = copy.deepcopy(self.nodes)
-        self.cto_data["cto_data"]["internal_caches"][ea]["caller_nodes"] = copy.deepcopy(self.caller_nodes)
-        self.cto_data["cto_data"]["internal_caches"][ea]["exceeded_nodes"] = copy.deepcopy(self.exceeded_nodes)
-        self.cto_data["cto_data"]["internal_caches"][ea]["node_ids"] = copy.deepcopy(self.node_ids)
-        self.cto_data["cto_data"]["internal_caches"][ea]["caller_node_ids"] = copy.deepcopy(self.caller_node_ids)
-        self.cto_data["cto_data"]["internal_caches"][ea]["exceeded_node_ids"] = copy.deepcopy(self.exceeded_node_ids)
-        self.cto_data["cto_data"]["internal_caches"][ea]["related_nodes"] = copy.deepcopy(self.related_nodes)
-        self.cto_data["cto_data"]["internal_caches"][ea]["strings_contents"] = copy.deepcopy(self.strings_contents)
-        self.cto_data["cto_data"]["internal_caches"][ea]["gvars_contents"] = copy.deepcopy(self.gvars_contents)
-        self.cto_data["cto_data"]["internal_caches"][ea]["stroff_contents"] = copy.deepcopy(self.stroff_contents)
-        self.cto_data["cto_data"]["internal_caches"][ea]["unresolved_indirect_calls"] = copy.deepcopy(self.unresolved_indirect_calls)
-        self.cto_data["cto_data"]["internal_caches"][ea]["node_id_relationships"] = copy.deepcopy(self.node_id_relationships)
-        self.cto_data["cto_data"]["internal_caches"][ea]["node_types"] = copy.deepcopy(self.node_types)
-        self.cto_data["cto_data"]["internal_caches"][ea]["additional_trace_points"] = copy.deepcopy(self.additional_trace_points)
-        self.cto_data["cto_data"]["internal_caches"][ea]["filtered_nodes"] = copy.deepcopy(self.filtered_nodes)
-        self.cto_data["cto_data"]["internal_caches"][ea]["trace_points_relations"] = copy.deepcopy(self.trace_points_relations)
-        
-        if self.config.debug: self.dbg_print("Saved all internal caches for %x%s" % (ea, os.linesep))
-    
-    def force_reload(self):
-        self.force_refresh_flag = True
-        ea = ida_kernwin.get_screen_ea()
-        f = ida_funcs.get_func(ea)
-        if f:
-            ea = f.start_ea
-        if ea not in self.func_relations:
-            ida_kernwin.msg("Must be in a function" + os.linesep)
-            return False
-
-        ## clear the navigation history to avoid IDA crashes
-        #if ea != self.start_ea:
-        #    self.exec_ui_action("EmptyStack")
-        
-        # save the internal cache to global variable
-        #self.save_internal_cache(self.start_ea)
-        
-        # replace the primary node ea to screen ea.
-        self.start_ea = ea
-        self.partial_cache_update(ea)
-        #self.clear_internal_caches(all_clear=True)
-        self.refresh_with_center_node()
-        return True
-
     # ida_graph.viewer_center_on will crash if the give node id is invalid.
     # so I need to protect.
     def do_center_node(self, nid, w=None):
@@ -1761,6 +1876,9 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
         """
         if self.config.debug:
             self.dbg_print("double-clicked on", self[node_id])
+            
+        # disable auto reload until this function ends
+        self.dont_auto_reload = True
         
         refresh_flag = False
         skip_add_trace_points = False
@@ -1854,21 +1972,20 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
 
             # filter the node
             refresh_flag = self.filter_nodes(node_id)
-
-            ## clear navigation history before decreasing nodes to avoid IDA crashes
-            #if refresh_flag:
-            #    self.exec_ui_action("EmptyStack")
-        
+            
+        # if refresh_flag is enabled, refresh the tree.
         if refresh_flag:
             if saved_ea != ida_idaapi.BADADDR:
                 ea = saved_ea
                 f = ida_funcs.get_func(saved_ea)
                 if f:
                     ea = f.start_ea
-                if ea in self.func_relations:
-                    self.save_internal_cache(ea)
+                    
+            self.to_be_saved_ea = self.start_ea
+            self.use_internal_function_cache = False
             self.refresh()
             
+        # jump to double-clicked location
         if saved_ea != ida_idaapi.BADADDR:
             self.jumpto(saved_ea)
             flag = True
@@ -1883,6 +2000,9 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                 if self.config.center_node and not self.is_node_in_canvas(nid):
                     self.do_center_node(nid)
                 self.select(nid)
+        
+        # enable auto reload again
+        self.dont_auto_reload = False
         
         if self.config.debug:
             self.dbg_print("OnDblClick() finished.")
@@ -1991,7 +2111,7 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
             self.config.save_caches = not self.config.save_caches
             ida_kernwin.msg("Save all internal caches option %sabled%s" % ("en" if self.config.save_caches else "dis", os.linesep))
             if self.config.save_caches:
-                ida_kernwin.msg("This option is an experimental feature. It may cause a problem.%s" % (os.linesep))
+                ida_kernwin.msg("This option is an ***EXPERIMENTAL*** feature. It may cause a problem.%s" % (os.linesep))
         # go to the Start address
         elif c == 'S' and state == 0:
             self.jumpto(self.start_ea)
@@ -2011,64 +2131,54 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
         elif c == 'S' and state == ALT:
             self.config.show_strings_nodes = not self.config.show_strings_nodes
             ## remove past navigation history of this graph.
-            #self.exec_ui_action("EmptyStack")
-            #self.refresh()
+            self.use_internal_function_cache = False
             self.refresh_with_center_node()
             ida_kernwin.msg("Strings %sabled%s" % ("en" if self.config.show_strings_nodes else "dis", os.linesep))
         # show referred global/static Variables in functions
         elif c == 'V' and state == 0:
             self.config.show_gvars_nodes = not self.config.show_gvars_nodes
             ## remove past navigation history of this graph.
-            #self.exec_ui_action("EmptyStack")
-            #self.refresh()
+            self.use_internal_function_cache = False
             self.refresh_with_center_node()
             ida_kernwin.msg("global/static Variables %sabled%s" % ("en" if self.config.show_gvars_nodes else "dis", os.linesep))
         # show structure member access in functions
         elif c == 'T' and state == SHIFT:
             self.config.show_stroff_nodes = not self.config.show_stroff_nodes
             ## remove past navigation history of this graph.
-            #self.exec_ui_action("EmptyStack")
-            #self.refresh()
+            self.use_internal_function_cache = False
             self.refresh_with_center_node()
             ida_kernwin.msg("sTructure members %sabled%s" % ("en" if self.config.show_stroff_nodes else "dis", os.linesep))
         # show cOmments in functions
         elif c == 'O' and state == 0:
             self.config.show_comment_nodes = not self.config.show_comment_nodes
             ## remove past navigation history of this graph.
-            #self.exec_ui_action("EmptyStack")
-            #self.refresh()
+            self.use_internal_function_cache = False
             self.refresh_with_center_node()
             ida_kernwin.msg("cOmments %sabled%s" % ("en" if self.config.show_comment_nodes else "dis", os.linesep))
         # show unresolved Indrect calls
         elif c == 'I' and state == 0:
             self.config.show_indirect_calls = not self.config.show_indirect_calls
-            #self.refresh()
+            self.use_internal_function_cache = False
             self.refresh_with_center_node()
-            ## remove past navigation history of this graph.
-            #self.exec_ui_action("EmptyStack")
             ida_kernwin.msg("unresolved Indirect Calls %sabled%s" % ("en" if self.config.show_indirect_calls else "dis", os.linesep))
         # disable to display cAller functions
         elif c == 'A' and state == 0:
             self.config.skip_caller = not self.config.skip_caller
-            ## remove past navigation history of this graph.
-            #self.exec_ui_action("EmptyStack")
+            self.use_internal_function_cache = False
             self.refresh_with_center_node()
             ida_kernwin.msg("skip cAller %sabled%s" % ("en" if self.config.skip_caller else "dis", os.linesep))
         # show Parent's children node
         elif c == 'P' and state == 0:
             self.config.display_children_in_parent_funcs = not self.config.display_children_in_parent_funcs
-            ## remove past navigation history of this graph.
-            #self.exec_ui_action("EmptyStack")
+            self.use_internal_function_cache = False
             self.refresh_with_center_node()
             ida_kernwin.msg("display child nodes in Parent functions %sabled%s" % ("en" if self.config.display_children_in_parent_funcs else "dis", os.linesep))
         # Update func relations
         elif c == 'U' and state == 0:
             ida_kernwin.show_wait_box("Wait for updating the cache")
-            #self.cache_update()
+            self.clear_internal_caches(all_clear=True)
             self.update_data()
-            ## remove past navigation history of this graph.
-            #self.exec_ui_action("EmptyStack")
-            #self.refresh()
+            self.use_internal_function_cache = False
             self.refresh_all()
             ida_kernwin.msg("the caches of the function relationships and the referred string were Updated." + os.linesep)
             ida_kernwin.hide_wait_box()
@@ -2076,12 +2186,13 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
         elif c == 'U' and state == SHIFT:
             ea = ida_kernwin.get_screen_ea()
             self.partial_cache_update(ea)
-            #self.exec_ui_action("EmptyStack")
+            self.use_internal_function_cache = False
             self.refresh_all(ea)
             ida_kernwin.msg("the caches of the function relationships and the referred string were Updated partially." + os.linesep)
         # Update func relations partially
         elif c == 'U' and state == CTRL:
             self.cache_cmt_update()
+            self.use_internal_function_cache = False
             self.refresh_all()
             ida_kernwin.msg("the caches related to comments were Updated." + os.linesep)
         # Help
@@ -2129,40 +2240,33 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
         # show xrefs to
         elif c == 'X' and state == 0:
             self.check_xrefs()
-            #self.exec_ida_ui_action("JumpOpXref")
         # add cref
         elif c == 'A' and state == CTRL:
             ea = ida_kernwin.get_screen_ea()
-            #if self.add_cref(ea):
             if self.add_cref(ea, CallTreeOverviewer.func_chooser_t):
                 self.partial_cache_update(ea)
-                #self.exec_ui_action("EmptyStack")
-                #self.refresh()
+                self.use_internal_function_cache = False
                 self.refresh_with_center_node()
                 ida_kernwin.msg("added the cref to the node." + os.linesep)
         # del cref
         elif c == 'D' and state == CTRL:
             ea = ida_kernwin.get_screen_ea()
-            #if self.del_cref(ea):
             if self.del_cref(ea, CallTreeOverviewer.cref_chooser_t):
                 self.partial_cache_update(ea)
-                #self.exec_ui_action("EmptyStack")
+                self.use_internal_function_cache = False
                 self.refresh()
                 ida_kernwin.msg("deleted the cref from the node." + os.linesep)
         elif c == '!' and state == SHIFT:
             ida_kernwin.msg("the maximum depth is one." + os.linesep)
-            #if self.max_depth != 1:
-            #    # remove past navigation history of this graph.
-            #    self.exec_ui_action("EmptyStack")
             self.max_depth = 1
+            self.use_internal_function_cache = False
             self.refresh()
         # decrease the maximum depth to dig deeper
         elif c == '-':
             if self.max_depth > 1:
                 self.max_depth -= 1
                 ida_kernwin.msg("the maximum depth is now %d.%s" % (self.max_depth, os.linesep))
-                ## remove past navigation history of this graph.
-                #self.exec_ui_action("EmptyStack")
+                self.use_internal_function_cache = False
                 self.refresh_with_center_node()
             else:
                 ida_kernwin.msg("the maximum depth is already one." + os.linesep)
@@ -2171,7 +2275,7 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
             if self.max_depth < self.limit_depth and len(self._nodes) < self.max_nodes:
                 self.max_depth += 1
                 ida_kernwin.msg("the maximum depth is now %d.%s" % (self.max_depth, os.linesep))
-                #self.refresh()
+                self.use_internal_function_cache = False
                 self.refresh_with_center_node()
             else:
                 ida_kernwin.msg("the maximum depth (%d) or the number of the nodes (%d) is too big. Expand a node you want manually.%s" % (self.max_depth, len(self.nodes), os.linesep))
@@ -2226,7 +2330,9 @@ E: go to the End node (if you specify for finding a path between two points).
 J: Jump to a displayed node with a chooser.
 A: enable/disable displaying cAllers (default is caller/callee mode)
 Alt+A: enable/disable Auto-reload feature which draws a new tree if a user
-       refers to a node outside the current tree. 
+       refers to a node outside the current tree.
+Shift+S: enable/disable Saving expanded/collapsed information data for later use with location history.
+         NOTE: this feature is EXPERIMENTAL!!! It may cause a problem.
 K: enable/disable darK mode.
 -: decrease the number of depth for digging into at once.
 +: increase the number of depth for digging into at once.
@@ -2387,6 +2493,7 @@ _: print several important internal caches for debugging.
         return disasm
     
     def get_callee_name(self, ea, func_type):
+        if self.config.debug: self.dbg_print("getting callee name:%x, %x" % (ea, func_type))
         func_name = ida_funcs.get_func_name(ea)
         func_flags = idc.get_func_attr(ea, idc.FUNCATTR_FLAGS)
         f = ida_funcs.get_func(ea)
@@ -2396,12 +2503,18 @@ _: print several important internal caches for debugging.
             func_name = self.get_space_removed_disasm(ea)
         elif func_type == FT_VTB:
             func_name = ida_name.get_name(ea)
+        elif func_type == FT_STR:
+            func_name = ida_name.get_name(ea)
+        elif func_type == FT_VAR:
+            func_name = ida_name.get_name(ea)
+        if self.config.debug: self.dbg_print("func name in the middle:%s" % (func_name))
         if not func_name:
             func_name = hex(ea).rstrip("L")
         # for a func chunk but it's located in a different segment or something like that.
         # it happens in a certain type of packer.
         elif f and ea != f.start_ea:
             func_name = ida_name.get_name(ea)
+        if self.config.debug: self.dbg_print("func name at last:%s" % (func_name))
         return self.color_callee_str(func_name, func_type)
     
     def get_widget_offset(self, w=None):
@@ -2752,7 +2865,7 @@ _: print several important internal caches for debugging.
                 if f:
                     if f.start_ea != src_ea and src_ea not in self.func_relations and f.start_ea in self.func_relations:
                         add_flag = False
-                        for direction in ["parents", "children"]:
+                        for direction in ["parents", "children", "gvars", "strings", "struct_offsets"]:
                             for caller in self.func_relations[f.start_ea][direction]:
                                 callee, _, _, _ = self.func_relations[f.start_ea][direction][caller]
                                 if caller == src_ea and callee == dst_ea:
@@ -2767,11 +2880,28 @@ _: print several important internal caches for debugging.
                             add_flag = True
                         if self.config.show_stroff_nodes and dst_ea in self.stroff_contents:
                             add_flag = True
+                        """
+                        if dst_ea in self.strings_contents:
+                            add_flag = True
+                        if dst_ea in self.gvars_contents:
+                            add_flag = True
+                        if dst_ea in self.stroff_contents:
+                            add_flag = True
+                        """
                             
                         if not add_flag:
                             if self.config.debug: self.dbg_print("Skipping adding an edge src: %x (%d, %s), dst: %x (%d, %s) from %s:%d because this pair does not have proper callee/caller relationships." % (src_ea, src, src_list_name, dst_ea, dst, dst_list_name, function, lineno))
                             return None
                         
+                elif src_ea in self.strings_contents or dst_ea in self.strings_contents:
+                    add_flag = True
+                elif src_ea in self.gvars_contents or dst_ea in self.gvars_contents:
+                    add_flag = True
+                elif src_ea in self.stroff_contents or dst_ea in self.stroff_contents:
+                    add_flag = True
+                elif src_ea in self.vtbl_refs or dst_ea in self.vtbl_refs:
+                    add_flag = True
+                    """
                 elif src_ea in self.strings_contents:
                     add_flag = True
                 elif src_ea in self.gvars_contents:
@@ -2780,6 +2910,7 @@ _: print several important internal caches for debugging.
                     add_flag = True
                 elif src_ea in self.vtbl_refs:
                     add_flag = True
+                    """
                 else:
                     if self.config.debug: self.dbg_print("Skipping adding an edge src: %x (%d, %s), dst: %x (%d, %s) from %s:%d because this pair does not have proper callee/caller relationships." % (src_ea, src, src_list_name, dst_ea, dst, dst_list_name, function, lineno))
                     return None
@@ -2919,6 +3050,14 @@ _: print several important internal caches for debugging.
         self.update_related_nodes(ea, start_ea)
         return nid
     
+    def cut_string_node(self, str_contents, str_ea):
+        str_contents = str_contents.replace('\r', '\\r').replace('\n', '\\n')
+        self.strings_contents[str_ea] = str_contents
+        taglen = len(str_contents) - ida_lines.tag_strlen(str_contents)
+        if len(str_contents) - taglen > self.maximum_string_length:
+            str_contents = str_contents[:self.maximum_string_length+taglen] + "..."
+        return str_contents
+    
     def insert_string_node(self, ea):
         if self.config.debug: self.dbg_print("Entering insert_string_node function for %x" % ea)
         # adding strings nodes
@@ -2948,15 +3087,11 @@ _: print several important internal caches for debugging.
                         sid = self.nodes[str_ea]
                         self.add_edge(rsid, sid)
                     else:
-                        str_contents = str_contents.replace('\r', '\\r').replace('\n', '\\n')
-                        self.strings_contents[str_ea] = str_contents
-                        taglen = len(str_contents) - ida_lines.tag_strlen(str_contents)
-                        if len(str_contents) - taglen > self.maximum_string_length:
-                            str_contents = str_contents[:self.maximum_string_length+taglen] + "..."
+                        str_contents = self.cut_string_node(str_contents, str_ea)
                         sid = self.add_node(str_ea, str_contents, self.strings_color, node_type="String")
                         self.add_edge(rsid, sid)
         if self.config.debug: self.dbg_print("Finished insert_string_node function for %x" % ea)
-    
+        
     def insert_var_node(self, ea, func_type, node_type, node_color, loc_cache, show_flag, skip_content):
         if self.config.debug: self.dbg_print("Entering insert_var_node function for %x" % ea)
         # adding strings nodes
@@ -2975,6 +3110,7 @@ _: print several important internal caches for debugging.
                         self.add_edge(self.nodes[ea], rsid)
                     else:
                         rsid = self.nodes[ea]
+
                     str_ea, _, _, str_contents = self.func_relations[ea][func_type][ref_str_ea]
                     if not skip_content:
                         if str_ea in self.caller_nodes:
@@ -3014,6 +3150,19 @@ _: print several important internal caches for debugging.
                             self.add_edge(self.nodes[ea], nid)
         if self.config.debug: self.dbg_print("Finished insert_comment_node function for %x" % ea)
 
+    def trace_paths_append_cache(self, start_ea, end_ea, fn_keys, cache, max_recursive=g_max_recursive, direction="parents", result=None):
+        found_flag = False
+        self.dbg_print("trace the call tree", hex(start_ea).rstrip("L"), hex(end_ea).rstrip("L"), direction, max_recursive, [hex(x).rstrip("L") for x in fn_keys], self.skip_api, self.skip_lib)
+        for r in get_func_relation.trace_func_calls(self.func_relations, ea=start_ea, target_ea=end_ea, direction=direction, max_recursive=max_recursive, filtered_nodes=self.filtered_nodes, skip_api=self.skip_api, skip_lib=self.skip_lib, debug=self.config.debug, dbg_print_func=self.dbg_print, result=result):
+            yield r
+            found_flag = True
+            if (start_ea, end_ea, direction, max_recursive, fn_keys, self.skip_api, self.skip_lib) in cache:
+                cache[(start_ea, end_ea, direction, max_recursive, fn_keys, self.skip_api, self.skip_lib)].add(tuple(r))
+            else:
+                cache[(start_ea, end_ea, direction, max_recursive, fn_keys, self.skip_api, self.skip_lib)] = set([tuple(r)])
+        if found_flag == False:
+            cache[(start_ea, end_ea, direction, max_recursive, fn_keys, self.skip_api, self.skip_lib)] = set([])
+                
     def trace_paths_with_cache(self, start_ea, end_ea, max_recursive=g_max_recursive, direction="parents", use_cache=True):
         cache = self.paths_cache
         if self.parent:
@@ -3025,28 +3174,67 @@ _: print several important internal caches for debugging.
             for p in cache[(start_ea, end_ea, direction, max_recursive, fn_keys, self.skip_api, self.skip_lib)]:
                 yield p
         else:
-            found_flag = False
-            self.dbg_print("trace the call tree", hex(start_ea).rstrip("L"), hex(end_ea).rstrip("L"), direction, max_recursive, [hex(x).rstrip("L") for x in fn_keys], self.skip_api, self.skip_lib)
-            for r in get_func_relation.trace_func_calls(self.func_relations, ea=start_ea, target_ea=end_ea, direction=direction, max_recursive=max_recursive, filtered_nodes=self.filtered_nodes, skip_api=self.skip_api, skip_lib=self.skip_lib, debug=self.config.debug, dbg_print_func=self.dbg_print):
-                yield r
-                found_flag = True
-                if (start_ea, end_ea, direction, max_recursive, fn_keys, self.skip_api, self.skip_lib) in cache:
-                    cache[(start_ea, end_ea, direction, max_recursive, fn_keys, self.skip_api, self.skip_lib)].add(tuple(r))
-                else:
-                    cache[(start_ea, end_ea, direction, max_recursive, fn_keys, self.skip_api, self.skip_lib)] = set([tuple(r)])
-            if found_flag == False:
-                cache[(start_ea, end_ea, direction, max_recursive, fn_keys, self.skip_api, self.skip_lib)] = set([])
-    
+            if start_ea in self.func_relations:
+                for r in self.trace_paths_append_cache(start_ea, end_ea, fn_keys, cache, max_recursive=max_recursive, direction=direction):
+                    yield r
+            else:
+                for ea, func_ea in get_func_relation.get_dref_belong_to_func(start_ea):
+                    func_type = FT_UNK
+                    if func_ea == ida_idaapi.BADADDR:
+                        continue
+                        #yield [(ea, func_ea, func_type)]
+                    elif ea in self.func_relations[func_ea]["gvars"]:
+                        func_type = FT_VAR
+                    elif ea in self.func_relations[func_ea]["strings"]:
+                        func_type = FT_STR
+                    if func_type != FT_UNK:
+                        if direction == "parents":
+                            result = [(ea, func_ea, func_type)]
+                            for r in self.trace_paths_append_cache(func_ea, end_ea, fn_keys, cache, max_recursive=max_recursive, direction=direction, result=result):
+                                yield r
+                                
+    def insert_dref_node_info(self, start_ea):
+        if start_ea in self.func_relations:
+            return
+        for dref_ea, dref_func_ea in get_func_relation.get_dref_belong_to_func(start_ea):
+            if dref_func_ea == ida_idaapi.BADADDR:
+                continue
+            func_type = FT_VAR
+            if dref_ea in self.func_relations[dref_func_ea]["strings"]:
+                str_ea, _, _, str_contents = self.func_relations[dref_func_ea]["strings"][dref_ea]
+                str_contents = self.cut_string_node(str_contents, str_ea)
+            elif dref_ea in self.func_relations[dref_func_ea]["gvars"]:
+                gvar_ea, _, _, gvar_contents = self.func_relations[dref_func_ea]["gvars"][dref_ea]
+                var_name = ida_name.get_name(gvar_ea)
+                if var_name:
+                    gvar_contents = var_name + " (" + gvar_contents + ")"
+                self.gvars_contents[start_ea] = gvar_contents
+                
     def draw_parents_call_tree(self, start_ea, end_ea, max_recursive=g_max_recursive):
         if start_ea not in self.related_nodes:
             self.related_nodes[start_ea] = set([start_ea])
         prev_id = None
-
+        
         if self.config.debug:
             self.dbg_print("##################### Start processing %x #################" % start_ea)
+            
         # push a starter node
+        self.insert_dref_node_info(start_ea)
         if start_ea not in self.nodes:
-            func_name = self.get_callee_name(start_ea, self.func_relations[start_ea]["func_type"])
+            # for functions
+            if start_ea in self.func_relations:
+                func_name = self.get_callee_name(start_ea, self.func_relations[start_ea]["func_type"])
+            # for strings and global variables
+            else:
+                for dref_ea, dref_func_ea in get_func_relation.get_dref_belong_to_func(start_ea):
+                    func_type = FT_VAR
+                    if dref_ea in self.func_relations[dref_func_ea]["strings"]:
+                        func_type = FT_STR
+                        break
+                    elif dref_ea in self.func_relations[dref_func_ea]["gvars"]:
+                        break
+                func_name = self.get_callee_name(start_ea, func_type)
+                    
             nid = self.add_node(start_ea, func_name, self.start_color, start_ea, node_type="Callee")
         else:
             nid = self.get_node_id(start_ea, start_ea)
@@ -3537,9 +3725,24 @@ _: print several important internal caches for debugging.
     def draw_children_call_tree(self, start_ea, end_ea, max_recursive=g_max_recursive):
         if start_ea not in self.related_nodes:
             self.related_nodes[start_ea] = set([start_ea])
+            
         # push a starter node
+        self.insert_dref_node_info(start_ea)
         if start_ea not in self.nodes:
-            func_name = self.get_callee_name(start_ea, self.func_relations[start_ea]["func_type"])
+            # for functions
+            if start_ea in self.func_relations:
+                func_name = self.get_callee_name(start_ea, self.func_relations[start_ea]["func_type"])
+            # for strings and global variables
+            else:
+                for dref_ea, dref_func_ea in get_func_relation.get_dref_belong_to_func(start_ea):
+                    func_type = FT_VAR
+                    if dref_ea in self.func_relations[dref_func_ea]["strings"]:
+                        func_type = FT_STR
+                        break
+                    elif dref_ea in self.func_relations[dref_func_ea]["gvars"]:
+                        break
+                func_name = self.get_callee_name(start_ea, func_type)
+            #func_name = self.get_callee_name(start_ea, self.func_relations[start_ea]["func_type"])
             nid = self.add_node(start_ea, func_name, self.start_color, start_ea, node_type="Callee")
             if nid == self.nodes[self.start_ea] and self._nodes[nid][1] != self.start_color:
                 self._nodes[nid] = (self._nodes[nid][0], self.start_color)
@@ -4030,7 +4233,26 @@ _: print several important internal caches for debugging.
                 elif callee == ida_idaapi.BADADDR:
                     # for indirect call but it has a pointer to an API
                     if caller != ida_idaapi.BADADDR:
-                        _, func_type, opn, func_name = self.func_relations[prev_callee]['children'][caller]
+                        #_, func_type, opn, func_name = self.func_relations[prev_callee]['children'][caller]
+                        func_name = ""
+                        func_type = FT_UNK
+                        opn = -1
+                        if prev_callee in self.func_relations:
+                            _, func_type, opn, func_name = self.func_relations[prev_callee]['children'][caller]
+                        else:
+                            func_type = FT_UNK
+                            opn = -1
+                            func_name = ""
+                            for dref_ea, dref_func_ea in get_func_relation.get_dref_belong_to_func(prev_callee):
+                                if dref_func_ea == ida_idaapi.BADADDR:
+                                    continue
+                                # get type and name on strings or gvars
+                                if dref_ea in self.func_relations[dref_func_ea]["strings"]:
+                                    _, func_type, opn, func_name = self.func_relations[dref_func_ea]["strings"][dref_ea]
+                                    break
+                                elif dref_ea in self.func_relations[dref_func_ea]["gvars"]:
+                                    _, func_type, opn, func_name = self.func_relations[dref_func_ea]['gvars'][dref_ea]
+                                    break
                         if func_name:
                             found_flag = False
                             for i, (txt, color) in enumerate(self._nodes):
@@ -4133,7 +4355,8 @@ _: print several important internal caches for debugging.
             ida_graph.viewer_set_gli(w, w_gli, ida_graph.GLICTL_CENTER)
             
     def show_graph(self, zoom=1):
-        if self.start_ea not in self.func_relations:
+        drefs = list(get_func_relation.get_drefs_to(self.start_ea))
+        if self.start_ea not in self.func_relations and len(drefs) == 0:
             ida_kernwin.msg("Must be in a function" + os.linesep)
             return False
         
@@ -4174,6 +4397,9 @@ _: print several important internal caches for debugging.
         
         # use the option not to close by pressing ESC key
         ida_kernwin.display_widget(self.GetWidget(), ida_kernwin.WOPN_NOT_CLOSED_BY_ESC, None)
+        
+        # jump to start ea
+        self.jumpto(self.start_ea)
         
         # center the start address
         nid = self.nodes[self.start_ea]

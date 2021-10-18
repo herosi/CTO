@@ -725,6 +725,14 @@ def get_drefs_to(ea):
         yield next_addr
         next_addr = ida_xref.get_next_dref_to(ea, next_addr)
 
+def get_dref_belong_to_func(ea):
+    for ea in get_drefs_to(ea):
+        f = ida_funcs.get_func(ea)
+        if f:
+            yield ea, f.start_ea
+        else:
+            yield ea, ida_idaapi.BADADDR
+
 def get_refed_strings():
     result = {}
     s = idautils.Strings()

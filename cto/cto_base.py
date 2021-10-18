@@ -126,7 +126,7 @@ class cto_base(debug_print.debug):
             self.show_stroff_nodes = False
             self.show_comment_nodes = False
             self.show_indirect_calls = True
-            self.auto_reload_outside_node = False
+            self.auto_reload_outside_node = True
             self.save_caches = False
     
     def dbg_print(self, *msg):
@@ -175,6 +175,27 @@ class cto_base(debug_print.debug):
             inst.copy_cache_data()
     
     def partial_cache_update(self, ea):
+        f = ida_funcs.get_func(ea)
+        if ea in self.func_relations:
+            func_type = self.func_relations[ea]["func_type"]
+            if func_type == FT_VTB:
+                vtbl = {}
+                for _, _ in get_func_relation.get_vtbl_methods(ea, vtbl):
+                    pass
+                for ea in vtbl:
+                    if ea == ida_idaapi.BADADDR:
+                        continue
+                    parents = get_func_relation.get_xrefs(ea)
+                    self.func_relations[ea] = {"parents":parents, "children":vtbl[ea], "func_type":func_type, "gvars":{}, "strings":{}, "struct_offsets":{}, "vftables":{}, "cmt":{}, "rcmt":{}}
+            elif func_type == FT_API:
+                parents = get_func_relation.get_xrefs(ea)
+                self.func_relations[ea] = {"parents":parents, "children":{}, "func_type":func_type, "gvars":{}, "strings":{}, "struct_offsets":{}, "vftables":{}, "cmt":{}, "rcmt":{}}
+            else:
+                self._partial_cache_update(ea)
+        elif f and f.start_ea in self.func_relations:
+            self._partial_cache_update(f.start_ea)
+                
+    def _partial_cache_update(self, ea):
         # updating a function that the ea belongs to.
         f, bbs = get_func_relation.get_func_bbs(ea)
         if f:

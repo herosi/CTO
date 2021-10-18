@@ -11,7 +11,7 @@ An introduction video is here.
 https://youtu.be/zVCpb82UfFs
 
 You can also check the presentation at VB2021 localhost.  
-https://vblocalhost.com/presentations/cto-call-tree-overviewer-yet-another-function-call-tree-viewer/
+https://vblocalhost.com/conference/presentations/cto-call-tree-overviewer-yet-another-function-call-tree-viewer/
 
 Submitted paper  
 https://vblocalhost.com/uploads/VB2021-Suzuki.pdf

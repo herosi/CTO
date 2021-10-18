@@ -11,13 +11,10 @@ import os
 import sys
 import traceback
 
-#g_ida_view = "IDA View-A"
-
 # Temoprary classes for UI and view hooks.
 # Their classes are only available in init function to avoid to forget unhooking and deleting.
 # Their instances are available while CallTreeOverviewer instance is available because they are generated at the end of init function below.
 class my_ui_hooks_t(ida_kernwin.UI_Hooks):
-    #def __init__(self, g, title=g_ida_view):
     def __init__(self, g):
         ida_kernwin.UI_Hooks.__init__(self)
         self.hook()
@@ -27,7 +24,6 @@ class my_ui_hooks_t(ida_kernwin.UI_Hooks):
         # (in other words: avoid circular reference.)
         import weakref
         self.v = weakref.ref(g)
-        #self.title = title
         self.cmdname = "<no command>"
         self.ctx = None
         self.cur_ea = ida_idaapi.BADADDR
@@ -160,7 +156,6 @@ class my_ui_hooks_t(ida_kernwin.UI_Hooks):
         ea = ida_kernwin.get_screen_ea()
         f = ida_funcs.get_func(ea)
         refresh_flag = False
-        #history_clear = False
         if self.cmdname == 'hx:Rename' and self.decomp_avail and self.is_ea_to_be_processed(ea):
             try:
                 import ida_hexrays
@@ -216,10 +211,8 @@ class my_ui_hooks_t(ida_kernwin.UI_Hooks):
                 if callee is not None:
                     optype = idc.get_operand_type(ea, opn)
                     if optype in [ida_ua.o_displ, ida_ua.o_phrase]:
-                        #self.v().update_caller_tif(ea)
                         self.update_tif(ea)
                         refresh_flag = True
-                        #history_clear = True
             self.make_name_line = None
         elif self.cmdname == 'MakeRptCmt':
             if self.is_ea_to_be_processed_cmt(ea):
@@ -227,28 +220,22 @@ class my_ui_hooks_t(ida_kernwin.UI_Hooks):
                     if hasattr(self.cur_func, "start_ea") and self.cur_func.start_ea == ea:
                         func_rcmt = ida_funcs.get_func_cmt(f, 1)
                         self._log("prev: ", self.func_rcmt, "curr:", func_rcmt)
-                        #if self.func_rcmt is not None and func_rcmt != self.func_rcmt:
                         if func_rcmt != self.func_rcmt:
                             self.v().partial_cache_update(f.start_ea)
                             refresh_flag = True
-                            #history_clear = True
                         self.func_rcmt = None
                 rcmt = ida_bytes.get_cmt(ea, 1)
                 self._log("prev: ", self.rcmt, "curr:", rcmt)
-                #if self.rcmt is not None and rcmt != self.rcmt:
                 if rcmt != self.rcmt:
                     refresh_flag = True
                     self.v().partial_cache_update(f.start_ea)
-                    #history_clear = True
                 self.rcmt = None
             elif self.is_ea_to_be_processed(ea):
                 rcmt = ida_bytes.get_cmt(ea, 1)
                 self._log("prev: ", self.rcmt, "curr:", rcmt)
-                #if self.rcmt is not None and rcmt != self.rcmt:
                 if rcmt != self.rcmt:
                     refresh_flag = True
                     self.v().partial_cache_update(f.start_ea)
-                    #history_clear = True
                 self.rcmt = None
         elif self.cmdname == 'MakeComment':
             if self.is_ea_to_be_processed_cmt(ea):
@@ -256,30 +243,22 @@ class my_ui_hooks_t(ida_kernwin.UI_Hooks):
                     if hasattr(self.cur_func, "start_ea") and self.cur_func.start_ea == ea:
                         func_cmt = ida_funcs.get_func_cmt(f, 0)
                         self._log("prev: ", self.func_cmt, "curr:", func_cmt)
-                        #if self.func_cmt is not None and func_cmt != self.func_cmt:
                         if func_cmt != self.func_cmt:
                             self.v().partial_cache_update(f.start_ea)
                             refresh_flag = True
-                            #history_clear = True
                         self.func_cmt = None
                 cmt = ida_bytes.get_cmt(ea, 0)
                 self._log("prev: ", self.cmt, "curr:", cmt)
-                #if self.cmt is not None and cmt != self.cmt:
                 if cmt != self.cmt:
-                    #self.v().update_caller_tif(ea, cmt)
                     self.update_tif(ea, cmt)
                     refresh_flag = True
-                    #history_clear = True
                 self.cmt = None
             elif self.is_ea_to_be_processed(ea):
                 cmt = ida_bytes.get_cmt(ea, 0)
                 self._log("prev: ", self.cmt, "curr:", cmt)
-                #if self.cmt is not None and cmt != self.cmt:
                 if cmt != self.cmt:
-                    #self.v().update_caller_tif(ea, cmt)
                     self.update_tif(ea, cmt)
                     refresh_flag = True
-                    #history_clear = True
                 self.cmt = None
         elif self.cmdname == 'OpStructOffset':
             if f and self.is_ea_to_be_processed(f.start_ea):
@@ -288,28 +267,23 @@ class my_ui_hooks_t(ida_kernwin.UI_Hooks):
                 if self.line is not None and line != self.line:
                     self.update_tif(ea)
                     refresh_flag = True
-                    #history_clear = True
                 self.line = None
         elif self.cmdname == 'SetColors':
-            #print("SetColors")
             refresh_flag = self.chk_dark_mode()
             
-        #w, wt = self.v().get_widget()
-        #print(w, wt)
-            
-        #if history_clear:
-        #    self.clear_history()
         if refresh_flag:
             self._log("refresh_flag is true. refreshing...")
-            #self.refresh()
-            self.v().refresh_all(ea)
-        #self.v().get_focus(self.v().GetWidget())
+            #self.v().refresh_all(ea)
+            self.refresh_all(ea)
         return 0
 
-    def refresh(self):
-        pass
-        #self.v().refresh()
-        
+    def refresh(self, ea=ida_idaapi.BADADDR, center=False):
+        self.v().refresh(ea, center)
+    
+    def refresh_all(self, ea=ida_idaapi.BADADDR, center=False):
+        for inst in self.v().cto_data['insts']:
+            inst.my_ui_hooks.refresh(ea, center)
+            
     def update_tif(self, ea, name=None):
         self.v().update_caller_tif(ea, name)
     
@@ -343,7 +317,6 @@ class my_ui_hooks_t(ida_kernwin.UI_Hooks):
             
 # observing "IDA View-A" window
 class my_view_hooks_t(ida_kernwin.View_Hooks):
-    #def __init__(self, g, title=g_ida_view):
     def __init__(self, g):
         ida_kernwin.View_Hooks.__init__(self)
         self.hook()

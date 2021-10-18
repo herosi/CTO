@@ -125,6 +125,8 @@ class comment_t(object):
         cmt_obj = comment_t()
         for func_ea, cmt_ea, cmt, cmt_type in cmt_obj.collect_cmts(ea):
             if func_ea != ida_idaapi.BADADDR:
+                if func_ea not in result:
+                    result[func_ea] = {"cmt":{}, "rcmt":{}}
                 result[func_ea][cmt_type][cmt_ea] = cmt
         return result
         
