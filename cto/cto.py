@@ -91,6 +91,7 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
             self.skip_lib = False
         
         self.icon = icon.icon_handler(icon_data=icon.g_icon_data_ascii, hexify=True)
+        self.icon_id = 0
         
         # basic config
         f = ida_funcs.get_func(start_ea)
@@ -168,14 +169,19 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                 return refresh_flag
             
             def populating_widget_popup(self, w, popup_handle):
-                wida, wt = self.v().get_widget()
                 my_w = self.v().GetWidget()
-                self._log("popup handler is called", wida, my_w, w)
-                if wida and w == wida and my_w:
-                    for skip, act_postfix, direction, direction2 in self.v().pf_args:
-                        actname = "path_finder%s:%s" % (act_postfix, self.v().title)
-                        desc = ida_kernwin.action_desc_t(actname, "Find the path(s) %s this node%s" % (direction, direction2), self.v().path_finder_by_ea(self.v(), skip, actname))
-                        ida_kernwin.attach_dynamic_action_to_popup(w, popup_handle, desc)
+                self._log("popup handler is called", my_w, w)
+                wt = ida_kernwin.get_widget_type(w)
+                if wt in [ida_kernwin.BWN_DISASM, ida_kernwin.BWN_PSEUDOCODE] and my_w:
+                    for actname, skip, direction, direction2 in self.v().path_finder_permanent_action_name():
+                        if actname not in ida_kernwin.get_registered_actions():
+                            # register it again because the action is unregistered after cto is reloaded sometimes.
+                            desc = ida_kernwin.action_desc_t(actname, "Find the path(s) %s this node%s" % (direction, direction2), self.v().path_finder_by_ea(self.v(), skip, actname, prefix="cto:path_finder"))
+                            ida_kernwin.register_action(desc)
+                            if self.v().icon_id > 0:
+                                ida_kernwin.update_action_icon(actname, self.v().icon_id)
+                        # add to a popup menu on IDA
+                        ida_kernwin.attach_action_to_popup(my_w, popup_handle, actname)
                     
         # observing "IDA View-A" window
         class my_view_hooks_t(syncui.my_view_hooks_t):
@@ -546,10 +552,11 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
             return 1
         
     class path_finder(_base_graph_action_handler_t):
-        def __init__(self, g, skip, act_name):
+        def __init__(self, g, skip, act_name, prefix="path_finder"):
             CallTreeOverviewer._base_graph_action_handler_t.__init__(self, g)
             self.skip = skip
             self.act_name = act_name
+            self.prefix = prefix
             
         def generate_sub_graph(self, node_ea):
             parent = self.v()
@@ -577,7 +584,7 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                 src_ea = node_ea
                 skip_api = True
                 skip_lib = True
-                if self.act_name.startswith("path_finder_start_end") or self.act_name.startswith("path_finder_end_start") or self.act_name.startswith("path_finder_start_end_skip") or self.act_name.startswith("path_finder_end_start_skip"):
+                if self.act_name.startswith("%s_start_end" % self.prefix) or self.act_name.startswith("%s_end_start" % self.prefix) or self.act_name.startswith("%s_start_end_skip" % self.prefix) or self.act_name.startswith("%s_end_start_skip" % self.prefix):
                     # choosing destination with a chooser
                     fc = CallTreeOverviewer.func_chooser_t("Choose the destination", self.v())
                     selected = fc.Show(modal=True)
@@ -587,11 +594,11 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                         depth = -1
                         skip_api = False
                         skip_lib = False
-                        if self.act_name.startswith("path_finder_end_start") or self.act_name.startswith("path_finder_end_start_skip"):
+                        if self.act_name.startswith("%s_end_start" % self.prefix) or self.act_name.startswith("%s_end_start_skip" % self.prefix):
                             _ = dst_ea
                             dst_ea = src_ea
                             src_ea = _
-                        if self.act_name.startswith("path_finder_start_end_skip") or self.act_name.startswith("path_finder_end_start_skip"):
+                        if self.act_name.startswith("%s_start_end_skip" % self.prefix) or self.act_name.startswith("%s_end_start_skip" % self.prefix):
                             skip_api = True
                             skip_lib = True
                     else:
@@ -630,6 +637,10 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
             return 1
     
     class path_finder_by_ea(path_finder):
+        def __del__(self):
+            # unregister path_finder* actions
+            ida_kernwin.unregister_action(self.act_name)
+            
         def get_ea(self):
             return ida_kernwin.get_screen_ea()
             
@@ -681,7 +692,10 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
     # that's why cto overrides this method.
     def refresh_all(self, ea=ida_idaapi.BADADDR, center=False):
         for inst in self.cto_data['insts']:
-            if isinstance(inst, CallTreeOverviewer):
+            # here, I don't wny but type(i) and isinstance and i.__class__
+            # aren't match with the class. That's why compare these strings here.
+            #if isinstance(inst, CallTreeOverviewer):
+            if str(type(inst)) == str(CallTreeOverviewer):
                 self.inst.use_internal_function_cache = False
             inst.refresh(ea, center)
             
@@ -1322,6 +1336,11 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                (DO_NOT_SKIP,    "_end_start_skip", "to"     , " from ... (tracing til libs and APIs) (very slow)"),
                )
     
+    def path_finder_permanent_action_name(self, prefix="cto:path_finder"):
+        for skip, act_postfix, direction, direction2 in self.pf_args:
+            actname = "%s%s" % (prefix, act_postfix)
+            yield actname, skip, direction, direction2
+    
     def popup_dispatcher(self, form, popup_handle):
         # get the selected node
         r = self.get_selected_node()
@@ -1478,6 +1497,8 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                 
                 if i < len(self.sub_graphs):
                     to_be_removed.append(i)
+            if self.icon_id > 0:
+                ida_kernwin.free_custom_icon(self.icon_id)
             
         # for a subgraph
         else:
@@ -3228,6 +3249,8 @@ _: print several important internal caches for debugging.
             else:
                 for dref_ea, dref_func_ea in get_func_relation.get_dref_belong_to_func(start_ea):
                     func_type = FT_VAR
+                    if dref_func_ea == ida_idaapi.BADADDR:
+                        continue
                     if dref_ea in self.func_relations[dref_func_ea]["strings"]:
                         func_type = FT_STR
                         break
@@ -3736,6 +3759,8 @@ _: print several important internal caches for debugging.
             else:
                 for dref_ea, dref_func_ea in get_func_relation.get_dref_belong_to_func(start_ea):
                     func_type = FT_VAR
+                    if dref_func_ea == ida_idaapi.BADADDR:
+                        continue
                     if dref_ea in self.func_relations[dref_func_ea]["strings"]:
                         func_type = FT_STR
                         break
@@ -4417,7 +4442,22 @@ _: print several important internal caches for debugging.
             self.change_widget_icon(bg_change=self.config.dark_mode)
         if prev_dark_mode != self.config.dark_mode or self.config.dark_mode:
             self.refresh()
-        
+            
+        # register path_finder* actions
+        if self.parent:
+            self.icon_id = self.parent.icon_id
+        else:
+            self.icon_id = ida_kernwin.load_custom_icon(data=self.icon.icon_data)
+            
+        for actname, skip, direction, direction2 in self.path_finder_permanent_action_name():
+            desc = ida_kernwin.action_desc_t(actname, "Find the path(s) %s this node%s" % (direction, direction2), self.path_finder_by_ea(self, skip, actname, prefix="cto:path_finder"))
+            # unregister it once if it has already registered
+            ida_kernwin.unregister_action(actname)
+            # register it again
+            ida_kernwin.register_action(desc)
+            
+            if self.icon_id > 0:
+                ida_kernwin.update_action_icon(actname, self.icon_id)
         return r
 
 def exec_cto(cto_data=None, curr_view=None, debug=False):

@@ -24,10 +24,12 @@ import cto_base
 import syncui
 import utils
 import icon
+#import cto
 ida_idaapi.require("cto_base")
 ida_idaapi.require("syncui")
 ida_idaapi.require("utils")
 ida_idaapi.require("icon")
+#ida_idaapi.require("cto")
 
 if not hasattr(ida_kernwin, "WOPN_NOT_CLOSED_BY_ESC"):
     setattr(ida_kernwin, "WOPN_NOT_CLOSED_BY_ESC", 0x100) # 7.5 lacks the definition
@@ -1052,18 +1054,44 @@ class cto_func_lister_t(cto_base.cto_base, ida_kernwin.PluginForm):
     def buildContextMenu(self, event):
         cmenu = QtWidgets.QMenu(self.tree)
         idx = self.tree.indexAt(event)
-        
-        newAct = cmenu.addAction("New")
-        opnAct = cmenu.addAction("Open")
-        quitAct = cmenu.addAction("Quit")
-        action = cmenu.exec_(self.tree.mapToGlobal(event))
         #print("right-click")
+
+        """
+        cto_inst = None
+        for i in self.cto_data['insts']:
+            # here, I don't wny but type(i) and isinstance and i.__class__
+            # aren't match with the class. That's why compare these strings here.
+            if str(type(i)) == str(cto.CallTreeOverviewer):
+                if i.parent is None:
+                    print("found cto")
+                    cto_inst = i
+                    break
+        act_dict = {}
+        if cto_inst:
+            for skip, act_postfix, direction, direction2 in cto_inst.pf_args:
+                actname = "path_finder%s:%s" % (act_postfix, cto_inst.title)
+                desc = ida_kernwin.action_desc_t(actname, "Find the path(s) %s this node%s" % (direction, direction2), cto_inst.path_finder_by_ea(cto_inst, skip, actname))
+                act_text = "Find the path(s) %s this node%s" % (direction, direction2)
+                act = cmenu.addAction(act_text)
+                act_dict[act] = cto_inst.path_finder_by_ea(cto_inst, skip, actname)
+        
+        action = cmenu.exec_(self.tree.mapToGlobal(event))
+        if action in act_dict:
+            act_dict[action].activate(None)
+        """
+        
+        """
+        #newAct = cmenu.addAction("New")
+        #opnAct = cmenu.addAction("Open")
+        #quitAct = cmenu.addAction("Quit")
+        action = cmenu.exec_(self.tree.mapToGlobal(event))
         if action == quitAct:
             self.Close(0)
         elif action == newAct:
             print("new")
         elif action == opnAct:
             print("open")
+        """
             
     def get_qwidget(self, w, max_try=100):
         r = None
@@ -1287,8 +1315,8 @@ D: enable/disable Debug mode
         self.tree.doubleClicked.connect(self.on_dbl_clk)
         
         # right-click
-        #self.tree.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
-        #self.tree.customContextMenuRequested.connect(self.buildContextMenu)
+        self.tree.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        self.tree.customContextMenuRequested.connect(self.buildContextMenu)
         
         # =========================
         # Create layout
