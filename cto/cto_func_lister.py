@@ -25,11 +25,13 @@ import syncui
 import utils
 import icon
 #import cto
+import get_func_relation
 ida_idaapi.require("cto_base")
 ida_idaapi.require("syncui")
 ida_idaapi.require("utils")
 ida_idaapi.require("icon")
 #ida_idaapi.require("cto")
+ida_idaapi.require("get_func_relation")
 
 if not hasattr(ida_kernwin, "WOPN_NOT_CLOSED_BY_ESC"):
     setattr(ida_kernwin, "WOPN_NOT_CLOSED_BY_ESC", 0x100) # 7.5 lacks the definition
@@ -516,8 +518,10 @@ class cto_func_lister_t(cto_base.cto_base, ida_kernwin.PluginForm):
                 if self.v().config.debug:
                     self.v().dbg_print(">>> MyUiHook: %s" % " ".join([str(x) for x in msg]))
                     
-            def refresh(self):
-                self.v().refresh(ida_kernwin.get_screen_ea())
+            def refresh(self, ea=ida_idaapi.BADADDR, center=False):
+                if ea == ida_idaapi.BADADDR:
+                    ea = ida_kernwin.get_screen_ea()
+                self.v().refresh(ea, center)
                 
             def chk_dark_mode(self):
                 refresh_flag = False
@@ -697,7 +701,11 @@ class cto_func_lister_t(cto_base.cto_base, ida_kernwin.PluginForm):
             self.clear_tree()
             self.PopulateTree()
         else:
-            # ToDo: if ea is string, check string and update string name ...
+            # if ea is string, check string and update string name ...
+            for ea, func_ea, dref_off_ea in get_func_relation.get_dref_belong_to_func(orig_ea):
+                self.update_function(func_ea)
+                
+            # for general functions
             self.update_callee_function(orig_ea)
             self.update_function(ea)
             
