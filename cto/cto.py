@@ -216,9 +216,10 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                 f = ida_funcs.get_func(now_ea)
                 
                 # Make sure I am in the same function
-                if now_ea in self.v().nodes:
-                    nid = self.v().nodes[now_ea]
-                    if does_use_opn and now_ea in self.v().caller_nodes:
+                if now_ea in self.v().nodes or now_ea in self.v().caller_nodes:
+                    if now_ea in self.v().nodes:
+                        nid = self.v().nodes[now_ea]
+                    if (does_use_opn or nid < 0) and now_ea in self.v().caller_nodes:
                         nid = self.v().caller_nodes[now_ea]
                     if nid < len(self.v()._nodes):
                         if self.v().config.center_node and not self.v().is_node_in_canvas(nid):
@@ -2077,7 +2078,7 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
         if use_opn is None:
             use_opn = self.does_use_opn()
         try:
-            if ea in self.nodes:
+            if ea in self.nodes or ea in self.caller_nodes:
                 r = self._jumpto(ea, use_opn=use_opn)
         except Exception as e:
             exc_type, exc_obj, tb = sys.exc_info()
