@@ -114,7 +114,7 @@ class cto_plugin_t(ida_idaapi.plugin_t):
             if f:
                 ea = f.start_ea
                 
-            # convert start addres if it is a vfunc
+            # convert start address if it is a vfunc
             if ea in self.g.vtbl_refs:
                 ea = self.g.vtbl_refs[ea]
             

@@ -850,7 +850,7 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
         if f:
             ea = f.start_ea
             
-        # convert start addres if it is a vfunc
+        # convert start address if it is a vfunc
         if ea in self.vtbl_refs:
             ea = self.vtbl_refs[ea]
             
@@ -4412,7 +4412,7 @@ _: print several important internal caches for debugging.
             ida_kernwin.msg("Must be in a function" + os.linesep)
             return False
         
-        # convert start addres if it is a vfunc
+        # convert start address if it is a vfunc
         if self.start_ea in self.vtbl_refs:
             self.start_ea = self.vtbl_refs[self.start_ea]
             
