@@ -113,8 +113,13 @@ class cto_plugin_t(ida_idaapi.plugin_t):
             f = ida_funcs.get_func(ea)
             if f:
                 ea = f.start_ea
+                
+            # convert start addres if it is a vfunc
+            if ea in self.g.vtbl_refs:
+                ea = self.g.vtbl_refs[ea]
+            
             drefs = list(get_func_relation.get_drefs_to(ea))
-            if not ea in self.g.func_relations and len(drefs) == 0:
+            if not ea in self.g.func_relations and len(drefs) == 0 and ea not in self.g.vtbl_refs:
                 ida_kernwin.msg("Current ea is not a function or an address in a function.%s" % (os.linesep))
                 ida_kernwin.msg("Not reloaded.%s" % (os.linesep))
                 return 0

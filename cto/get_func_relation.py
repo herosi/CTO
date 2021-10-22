@@ -550,7 +550,6 @@ def get_funcptr_ea(ea, bbs, import_eas, string_eas):
                 break
             # unresolved indirect calls
             elif is_call_insn(ea) or (is_indirect_jump_insn(ea) and not get_switch_info(ea)):
-            #if is_call_insn(ea) or (is_indirect_jump_insn(ea) and not get_switch_info(ea)):
                 func_type = FT_MEM
                 # if ea has an external xref set by a user manually, get it.
                 # however, it gets the first one only.
@@ -574,6 +573,17 @@ def get_funcptr_ea(ea, bbs, import_eas, string_eas):
                         target_ea = v
                         break
                 break
+            # add     r8, rva qword_7FF9648578E0[r9+rcx*8]
+            elif optype in [ida_ua.o_displ, ida_ua.o_phrase]:
+                opstr = idc.print_operand(ea, i)
+                v = idc.get_operand_value(ea, i)
+                if target_ea == ida_idaapi.BADADDR:
+                    # for rva address, you will need to use get_operand_value's value + dref value
+                    next_ea_base = ida_xref.get_first_dref_from(ea)
+                    if next_ea_base != ida_idaapi.BADADDR and opstr.startswith("rva "):
+                        target_ea = v + next_ea_base
+                        func_type = FT_VAR
+                        break
     
     if func_type not in [FT_API, FT_MEM, FT_VAR, FT_STR, FT_STO, FT_VTB]:
         func_type = get_func_type(target_ea, import_eas)
@@ -594,8 +604,11 @@ def get_stroff_ea(ea, import_eas):
         v = idc.get_operand_value(ea, i)
         flags = ida_bytes.get_full_flags(v)
         if optype in [ida_ua.o_displ, ida_ua.o_phrase]:
-            v = get_ref_func(ea)
-            target_ea = get_offset_fptr(v)
+            vv = get_ref_func(ea)
+            target_ea = get_offset_fptr(vv)
+            if target_ea == ida_idaapi.BADADDR:
+                if vv != ida_idaapi.BADADDR:
+                    target_ea = vv
             flags = ida_bytes.get_full_flags(ea)
             if not ida_bytes.is_stkvar(flags, i):
                 opstr = idc.print_operand(ea, i)
@@ -606,7 +619,6 @@ def get_stroff_ea(ea, import_eas):
                 # stos instruction has a hidden phrase operand as the first operand.
                 # nop is used for instruction alignments for AMD64 assembly.
                 if opstr and not mnem in g_dont_record_mnems:
-                    #print("%x, %x, %x" % (ea, v, target_ea))
                     func_type = FT_STO
                     break
     if func_type not in [FT_API, FT_MEM, FT_VAR, FT_STR, FT_STO, FT_VTB]:
@@ -655,8 +667,8 @@ def get_calls_in_bb(bb, bbs, import_eas, string_eas, result=None, apicalls=None,
     while ea < bb.end_ea:
         target_ea, func_type, op, target_name = get_funcptr_ea(ea, bbs, import_eas, string_eas)
         if func_type == FT_UNK and target_ea == ida_idaapi.BADADDR:
-            #print("%x, %d" % (target_ea, func_type))
             target_ea, func_type, op, target_name = get_stroff_ea(ea, import_eas)
+            #print("%x, %d" % (target_ea, func_type))
         if func_type not in [FT_UNK, FT_VAR, FT_STR, FT_STO] or (func_type == FT_UNK and target_ea != ida_idaapi.BADADDR):
             result[ea] = (target_ea, func_type, op, target_name)
             if func_type == FT_API:
@@ -703,6 +715,8 @@ def get_xrefs(ea):
             func_ea = f.start_ea
             func_type = get_func_type(func_ea)
             result[next_addr] = (func_ea, func_type, op, "")
+        else:
+            result[next_addr] = (func_ea, func_type, op, "")
         next_addr = ida_xref.get_next_fcref_to(ea, next_addr)
     # lea    r8, sub_xxxxxxxx
     next_addr = ida_xref.get_first_dref_to(ea)
@@ -716,22 +730,82 @@ def get_xrefs(ea):
             flags = ida_bytes.get_full_flags(func_ea)
             if ida_bytes.is_code(flags):
                 result[next_addr] = (func_ea, func_type, op, "")
+        else:
+            flags = ida_bytes.get_full_flags(next_addr)
+            if ida_bytes.is_code(flags):
+                result[next_addr] = (func_ea, func_type, op, "")
+            else:
+                v = get_var_value(next_addr)
+                # ea is var/str and xref is a offset to the ea
+                if v == ea:
+                    for next_next_addr in get_drefs_to(next_addr):
+                        f = ida_funcs.get_func(next_next_addr)
+                        func_ea = ida_idaapi.BADADDR
+                        func_type = FT_UNK
+                        if f is not None:
+                            func_ea = f.start_ea
+                            func_type = get_func_type(func_ea)
+                            flags = ida_bytes.get_full_flags(func_ea)
+                            if ida_bytes.is_code(flags):
+                                result[next_addr] = (func_ea, func_type, op, "")
+                        else:
+                            flags = ida_bytes.get_full_flags(next_addr)
+                            if ida_bytes.is_code(flags):
+                                result[next_addr] = (func_ea, func_type, op, "")
+                    
         next_addr = ida_xref.get_next_dref_to(ea, next_addr)
     return result
 
+def get_xrefs_in_range(ea=idc.get_inf_attr(idc.INF_MIN_EA), max_ea=idc.get_inf_attr(idc.INF_MAX_EA)):
+    flags = ida_bytes.get_flags(ea)
+    if ida_bytes.has_xref(flags):
+        yield ea
+        
+    next_ea = ida_bytes.next_that(ea, max_ea, ida_bytes.has_xref)
+    while next_ea != ida_idaapi.BADADDR:
+        yield next_ea
+        next_ea = ida_bytes.next_that(next_ea, max_ea, ida_bytes.has_xref)
+        
+"""
 def get_drefs_to(ea):
     next_addr = ida_xref.get_first_dref_to(ea)
     while next_addr != ida_idaapi.BADADDR:
         yield next_addr
         next_addr = ida_xref.get_next_dref_to(ea, next_addr)
+"""
+def _get_drefs_to(ea):
+    next_addr = ida_xref.get_first_dref_to(ea)
+    while next_addr != ida_idaapi.BADADDR:
+        yield next_addr
+        next_addr = ida_xref.get_next_dref_to(ea, next_addr)
+
+def get_drefs_to(ea):
+    item_sz = ida_bytes.get_item_size(ea)
+    for next_ea in get_xrefs_in_range(ea, ea+item_sz):
+        for next_ea in _get_drefs_to(next_ea):
+            yield next_ea
 
 def get_dref_belong_to_func(ea):
-    for ea in get_drefs_to(ea):
-        f = ida_funcs.get_func(ea)
+    for next_ea in get_drefs_to(ea):
+        #print(hex(next_ea).rstrip("L"), hex(ea).rstrip("L"))
+        f = ida_funcs.get_func(next_ea)
+        flags = ida_bytes.get_full_flags(next_ea)
         if f:
-            yield ea, f.start_ea
+            yield next_ea, f.start_ea, ida_idaapi.BADADDR
+        elif ida_bytes.is_code(flags):
+            yield next_ea, ida_idaapi.BADADDR, ida_idaapi.BADADDR
         else:
-            yield ea, ida_idaapi.BADADDR
+            v = get_var_value(next_ea)
+            # ea is var/str and xref is a offset to the ea
+            if v == ea:
+                for next_next_ea in get_drefs_to(next_ea):
+                    f = ida_funcs.get_func(next_next_ea)
+                    if f is not None:
+                        yield next_next_ea, f.start_ea, next_ea
+                    else:
+                        flags = ida_bytes.get_full_flags(next_next_ea)
+                        if ida_bytes.is_code(flags):
+                            yield next_next_ea, ida_idaapi.BADADDR, next_ea
 
 def get_refed_strings():
     result = {}
@@ -780,11 +854,14 @@ def get_opnums(func_relations, keyword='children'):
             opnums[caller] = op
     return opnums
 
+# for reverse lookup of vftable
 def get_vtbl_refs(func_relations):
     result = {}
     for func_ea in func_relations:
         for vtbl_offset in func_relations[func_ea]["vftables"]:
-            result.update(func_relations[func_ea]["vftables"][vtbl_offset])
+            for vfptr in func_relations[func_ea]["vftables"][vtbl_offset]:
+                result[vfptr] = vtbl_offset
+            #result.update(func_relations[func_ea]["vftables"][vtbl_offset])
     return result
 
 def get_strings_in_funcs():
@@ -797,6 +874,11 @@ def get_strings_in_funcs():
                 strings_in_func[f.start_ea][ea] = strings[ea]
             else:
                 strings_in_func[f.start_ea] = {ea:strings[ea]}
+        else:
+            if ida_idaapi.BADADDR in strings_in_func:
+                strings_in_func[ida_idaapi.BADADDR][ea] = strings[ea]
+            else:
+                strings_in_func[ida_idaapi.BADADDR] = {ea:strings[ea]}
     return strings_in_func
 
 def is_matched(text, regexes):

@@ -209,7 +209,8 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
             def update_widget_b_ea(self, now_ea, was_ea):
                 if self.v().config.debug:
                     self._log("now_ea: %x, was_ea: %x" % (now_ea, was_ea))
-                    
+
+                w = ida_kernwin.get_current_widget()
                 does_use_opn = self.v().does_use_opn()
                 nid = -1
                 f = ida_funcs.get_func(now_ea)
@@ -227,10 +228,21 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                         ni.bg_color    = self.v().selected_bg_color
                         self.v().SetNodeInfo(nid, ni, ida_graph.NIF_BG_COLOR|ida_graph.NIF_FRAME_COLOR)
                 # if now_ea is not in ea, and auto reload flag is enabled, then reload and return to draw a new graph based on now_ea.
-                elif self.v().config.auto_reload_outside_node and (now_ea in self.v().func_relations or f) and not self.v().dont_auto_reload:
+                elif self.v().config.auto_reload_outside_node and (now_ea in self.v().func_relations or f or now_ea in self.v().vtbl_refs) and not self.v().dont_auto_reload:
                     if self.v().config.debug:
                         self._log("auto reloading")
-                    self.v().force_reload(now_ea)
+                        
+                    # relace ea with a head of vtable if ea is one of functions in a vtable
+                    ea = now_ea
+                    if ea in self.v().vtbl_refs:
+                        ea = self.v().vtbl_refs[now_ea]
+                        
+                    # change the primary node and rebuild the tree
+                    self.v().force_reload(ea)
+                    
+                    # take focus back on the current widget
+                    if w:
+                        self.v().get_focus(w)
                     return
                         
                 # remove the previous node frame color
@@ -696,7 +708,7 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
             # aren't match with the class. That's why compare these strings here.
             #if isinstance(inst, CallTreeOverviewer):
             if str(type(inst)) == str(CallTreeOverviewer):
-                self.inst.use_internal_function_cache = False
+                inst.use_internal_function_cache = False
             inst.refresh(ea, center)
             
     # wrapper for Refresh() that ends up to call OnRefresh() internally.
@@ -838,12 +850,18 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
         if f:
             ea = f.start_ea
             
+        # convert start addres if it is a vfunc
+        if ea in self.vtbl_refs:
+            ea = self.vtbl_refs[ea]
+            
         if ea != self.start_ea:
             self.to_be_saved_ea = ea
             
         # check if it can reload or not.
-        drefs = list(get_func_relation.get_drefs_to(self.start_ea))
-        if self.start_ea not in self.func_relations and len(drefs) == 0:
+        #drefs = list(get_func_relation.get_drefs_to(self.start_ea))
+        #if self.start_ea not in self.func_relations and len(drefs) == 0:
+        drefs = list(get_func_relation.get_drefs_to(ea))
+        if ea not in self.func_relations and len(drefs) == 0:
             ida_kernwin.msg("Must be in a function" + os.linesep)
             return False
             
@@ -2895,6 +2913,7 @@ _: print several important internal caches for debugging.
                                 
                         if dst_ea == v:
                             add_flag = True
+                        """
                         if self.config.show_strings_nodes and dst_ea in self.strings_contents:
                             add_flag = True
                         if self.config.show_gvars_nodes and dst_ea in self.gvars_contents:
@@ -2908,7 +2927,9 @@ _: print several important internal caches for debugging.
                             add_flag = True
                         if dst_ea in self.stroff_contents:
                             add_flag = True
-                        """
+                        #if src_ea in self.vtbl_refs and dst_ea in self.vtbl_refs[src_ea]:
+                        #    add_flag = True
+                        #"""
                             
                         if not add_flag:
                             if self.config.debug: self.dbg_print("Skipping adding an edge src: %x (%d, %s), dst: %x (%d, %s) from %s:%d because this pair does not have proper callee/caller relationships." % (src_ea, src, src_list_name, dst_ea, dst, dst_list_name, function, lineno))
@@ -3198,16 +3219,21 @@ _: print several important internal caches for debugging.
             if start_ea in self.func_relations:
                 for r in self.trace_paths_append_cache(start_ea, end_ea, fn_keys, cache, max_recursive=max_recursive, direction=direction):
                     yield r
+            elif start_ea in self.vtbl_refs:
+                yield [(start_ea, self.vtbl_refs[start_ea], FT_VTB)]
             else:
-                for ea, func_ea in get_func_relation.get_dref_belong_to_func(start_ea):
+                for ea, func_ea, dref_off_ea in get_func_relation.get_dref_belong_to_func(start_ea):
+                    if self.config.debug: self.dbg_print("ea:", hex(ea).rstrip("L"), "func_ea:", hex(func_ea).rstrip("L"), "dref_off_ea:", hex(dref_off_ea).rstrip("L"))
                     func_type = FT_UNK
                     if func_ea == ida_idaapi.BADADDR:
-                        continue
-                        #yield [(ea, func_ea, func_type)]
-                    elif ea in self.func_relations[func_ea]["gvars"]:
-                        func_type = FT_VAR
+                        if direction == "parents":
+                            yield [(ea, func_ea, func_type)]
+                    elif ea in self.func_relations[func_ea]["children"]:
+                        func_type = self.func_relations[func_ea]["children"][ea]
                     elif ea in self.func_relations[func_ea]["strings"]:
                         func_type = FT_STR
+                    elif ea in self.func_relations[func_ea]["gvars"]:
+                        func_type = FT_VAR
                     if func_type != FT_UNK:
                         if direction == "parents":
                             result = [(ea, func_ea, func_type)]
@@ -3217,14 +3243,13 @@ _: print several important internal caches for debugging.
     def insert_dref_node_info(self, start_ea):
         if start_ea in self.func_relations:
             return
-        for dref_ea, dref_func_ea in get_func_relation.get_dref_belong_to_func(start_ea):
-            if dref_func_ea == ida_idaapi.BADADDR:
-                continue
+        for dref_ea, dref_func_ea, dref_off_ea in get_func_relation.get_dref_belong_to_func(start_ea):
             func_type = FT_VAR
-            if dref_ea in self.func_relations[dref_func_ea]["strings"]:
+            if dref_func_ea in self.func_relations and dref_ea in self.func_relations[dref_func_ea]["strings"]:
                 str_ea, _, _, str_contents = self.func_relations[dref_func_ea]["strings"][dref_ea]
                 str_contents = self.cut_string_node(str_contents, str_ea)
-            elif dref_ea in self.func_relations[dref_func_ea]["gvars"]:
+                str_contents = self.cut_string_node(str_contents, start_ea)
+            elif dref_func_ea in self.func_relations and dref_ea in self.func_relations[dref_func_ea]["gvars"]:
                 gvar_ea, _, _, gvar_contents = self.func_relations[dref_func_ea]["gvars"][dref_ea]
                 var_name = ida_name.get_name(gvar_ea)
                 if var_name:
@@ -3247,10 +3272,9 @@ _: print several important internal caches for debugging.
                 func_name = self.get_callee_name(start_ea, self.func_relations[start_ea]["func_type"])
             # for strings and global variables
             else:
-                for dref_ea, dref_func_ea in get_func_relation.get_dref_belong_to_func(start_ea):
+                func_type = FT_VAR
+                for dref_ea, dref_func_ea, dref_off_ea in get_func_relation.get_dref_belong_to_func(start_ea):
                     func_type = FT_VAR
-                    if dref_func_ea == ida_idaapi.BADADDR:
-                        continue
                     if dref_ea in self.func_relations[dref_func_ea]["strings"]:
                         func_type = FT_STR
                         break
@@ -3552,7 +3576,7 @@ _: print several important internal caches for debugging.
                 # callee is BADADDR or caller is in self.filtered_nodes
                 else:
                     if self.config.debug:
-                        self.dbg_print("callee is BADADDR (means the path is exceeded of limitation) or caller is in filtered_list")
+                        self.dbg_print("callee is BADADDR (means the path is exceeded of limitation) or caller is in filtered_list or caller is not in a function but a part of code")
                     if callee in self.nodes:
                         if self.config.debug: self.dbg_print("updating prev_id, was: ", prev_id, "now: ", self.nodes[callee])
                         prev_id = self.nodes[callee]
@@ -3606,6 +3630,15 @@ _: print several important internal caches for debugging.
                                 # that a user expanded an exceeded node.
                                 # I do not need to do anything. Contineue processing...
                                 pass
+                    """
+                    else:
+                        if caller != ida_idaapi.BADADDR and not ida_funcs.get_func(caller):
+                            self.dbg_print("%x, %x" % (caller, callee))
+                            if self.config.debug:
+                                self.dbg_print("updating prev_id. (old) prev_id:", prev_id, "(new) callee_id:", None)
+                            prev_id = None
+                            callee_id = -1
+                    """
                 
                 #################################
                 #
@@ -3757,17 +3790,15 @@ _: print several important internal caches for debugging.
                 func_name = self.get_callee_name(start_ea, self.func_relations[start_ea]["func_type"])
             # for strings and global variables
             else:
-                for dref_ea, dref_func_ea in get_func_relation.get_dref_belong_to_func(start_ea):
+                func_type = FT_VAR
+                for dref_ea, dref_func_ea, dref_off_ea in get_func_relation.get_dref_belong_to_func(start_ea):
                     func_type = FT_VAR
-                    if dref_func_ea == ida_idaapi.BADADDR:
-                        continue
                     if dref_ea in self.func_relations[dref_func_ea]["strings"]:
                         func_type = FT_STR
                         break
                     elif dref_ea in self.func_relations[dref_func_ea]["gvars"]:
                         break
                 func_name = self.get_callee_name(start_ea, func_type)
-            #func_name = self.get_callee_name(start_ea, self.func_relations[start_ea]["func_type"])
             nid = self.add_node(start_ea, func_name, self.start_color, start_ea, node_type="Callee")
             if nid == self.nodes[self.start_ea] and self._nodes[nid][1] != self.start_color:
                 self._nodes[nid] = (self._nodes[nid][0], self.start_color)
@@ -4258,7 +4289,6 @@ _: print several important internal caches for debugging.
                 elif callee == ida_idaapi.BADADDR:
                     # for indirect call but it has a pointer to an API
                     if caller != ida_idaapi.BADADDR:
-                        #_, func_type, opn, func_name = self.func_relations[prev_callee]['children'][caller]
                         func_name = ""
                         func_type = FT_UNK
                         opn = -1
@@ -4268,10 +4298,7 @@ _: print several important internal caches for debugging.
                             func_type = FT_UNK
                             opn = -1
                             func_name = ""
-                            for dref_ea, dref_func_ea in get_func_relation.get_dref_belong_to_func(prev_callee):
-                                if dref_func_ea == ida_idaapi.BADADDR:
-                                    continue
-                                # get type and name on strings or gvars
+                            for dref_ea, dref_func_ea, dref_off_ea in get_func_relation.get_dref_belong_to_func(prev_callee):
                                 if dref_ea in self.func_relations[dref_func_ea]["strings"]:
                                     _, func_type, opn, func_name = self.func_relations[dref_func_ea]["strings"][dref_ea]
                                     break
@@ -4381,10 +4408,14 @@ _: print several important internal caches for debugging.
             
     def show_graph(self, zoom=1):
         drefs = list(get_func_relation.get_drefs_to(self.start_ea))
-        if self.start_ea not in self.func_relations and len(drefs) == 0:
+        if self.start_ea not in self.func_relations and len(drefs) == 0 and self.start_ea not in self.vtbl_refs:
             ida_kernwin.msg("Must be in a function" + os.linesep)
             return False
         
+        # convert start addres if it is a vfunc
+        if self.start_ea in self.vtbl_refs:
+            self.start_ea = self.vtbl_refs[self.start_ea]
+            
         # display IDA View window
         w, wt = self.get_widget()
         wname = ida_kernwin.get_widget_title(w)
