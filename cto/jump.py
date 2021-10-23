@@ -356,7 +356,7 @@ def jumpto_opn_ida(ea, opn, w):
         fn = ""
         if func_name:
             fn = ida_lines.tag_remove(func_name)
-        if optype in [ida_ua.o_displ, ida_ua.o_phrase]:
+        if optype in [ida_ua.o_displ, ida_ua.o_phrase, ida_ua.o_mem]:
             # IDA's jumpto API does not point to the first character
             # if an operand starts with "[" like "lea     rax, [rdi+0B0h]".
             # This is a tweak value for it.
@@ -368,8 +368,28 @@ def jumpto_opn_ida(ea, opn, w):
             # for a stack variable name or a non-applied structure member
             elif op.find("+") >= 0:
                 fn = op.rsplit("+", 1)[1]
+                if fn.find("]") >= 0:
+                    fn = fn.split("]")[0]
+                if fn.find(")") >= 0:
+                    fn = fn.split(")")[0]
             elif op.find("[") >= 0:
                 fn = op.rsplit("[", 1)[1]
+                if fn.find("]") >= 0:
+                    fn = fn.split("]")[0]
+            elif op.find(":") >= 0:
+                fn = op.rsplit(":", 1)[1]
+            else:
+                fn = op
+        # mov     [ebp+lpMultiByteStr], (offset MultiByteStr+40h)
+        elif optype in [ida_ua.o_imm]:
+            if op.find(".") >= 0:
+                fn = op.rsplit(".", 1)[1]
+            elif op.find("offset ") >= 0:
+                fn = op.rsplit("offset ", 1)[1]
+                if fn.find("+") >= 0:
+                    fn = fn.split("+")[0]
+            else:
+                fn = op
         # for offset
         else:
             fn = ida_name.get_name(v)
