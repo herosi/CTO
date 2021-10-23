@@ -521,6 +521,8 @@ class cto_func_lister_t(cto_base.cto_base, ida_kernwin.PluginForm):
             def refresh(self, ea=ida_idaapi.BADADDR, center=False):
                 if ea == ida_idaapi.BADADDR:
                     ea = ida_kernwin.get_screen_ea()
+                self.v().change_widget_icon(bg_change=self.v().config.dark_mode)
+                self.v().tree.reset_btn_size()
                 self.v().refresh(ea, center)
                 
             def chk_dark_mode(self):
@@ -1549,8 +1551,8 @@ D: enable/disable Debug mode
             
             ida_kernwin.set_dock_pos(self.title, "Functions window", ida_kernwin.DP_TAB)
             
+        self.change_widget_icon(bg_change=self.config.dark_mode)
         if self.config.dark_mode:
-            self.change_widget_icon(bg_change=self.config.dark_mode)
             self.tree.reset_btn_size()
             
         return r

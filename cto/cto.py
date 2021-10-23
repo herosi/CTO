@@ -149,6 +149,9 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                 self._log("refresh without cache (%x)" % ea, center)
                 self.v().use_internal_function_cache = False
                 self.v().refresh(ea, center)
+                self.v().color_settings()
+                self.v().color_all_nodes()
+                self.v().change_widget_icon(bg_change=self.v().config.dark_mode)
                 
             def chk_dark_mode(self):
                 refresh_flag = False
@@ -4470,8 +4473,7 @@ _: print several important internal caches for debugging.
             self.config.dark_mode = self.is_dark_mode_with_main()
         else:
             self.config.dark_mode = self.is_dark_mode()
-        if self.config.dark_mode:
-            self.change_widget_icon(bg_change=self.config.dark_mode)
+        self.change_widget_icon(bg_change=self.config.dark_mode)
         if prev_dark_mode != self.config.dark_mode or self.config.dark_mode:
             self.refresh()
             
