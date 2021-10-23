@@ -131,11 +131,15 @@ FT_VAR = 16   # for global/static variables. strictly speaking, it's not "func t
 FT_STR = 32   # for string variables. strictly speaking, it's not "func type"
 FT_STO = 64   # for structure's offset access. strictly speaking, it's not "func type"
 FT_VTB = 128  # for vftable
-def get_func_type(func_ea, import_eas=None):
+def get_func_type(func_ea, import_eas=None, func_type=FT_UNK):
     if import_eas is None:
         import_eas = []
-    func_type = FT_UNK
-    func_flags = idc.get_func_attr(func_ea, idc.FUNCATTR_FLAGS)
+    #func_type = FT_UNK
+    try:
+        func_flags = idc.get_func_attr(func_ea, idc.FUNCATTR_FLAGS)
+    except TypeError:
+        return func_type
+    
     f = ida_funcs.get_func(func_ea)
     
     fn = idc.get_func_name(func_ea)
@@ -438,6 +442,7 @@ def get_str(ea, v, string_eas):
             data = hex(tmp_data)
         else:
             data = "N/A"
+    #print("%x" % ea, data, data_type)
     return data, data_type
 
 def get_funcptr_ea(ea, bbs, import_eas, string_eas):
@@ -505,6 +510,11 @@ def get_funcptr_ea(ea, bbs, import_eas, string_eas):
                         target_ea = v
                         func_type = FT_VTB
                     break
+                # call    dword_1003B3C8
+                elif is_call_insn(ea):
+                    if target_ea == ida_idaapi.BADADDR:
+                        target_ea = v
+                    break
                 # for static/global variables or strings or vftable
                 elif not ida_bytes.is_code(flags):
                     tmp_func_name, tmp_func_type, _v = get_func_info_by_opstr(ea, i)
@@ -525,8 +535,20 @@ def get_funcptr_ea(ea, bbs, import_eas, string_eas):
                     break
                 # for static/global variables or strings or vftable
                 elif v != ida_idaapi.BADADDR:
-                    target_ea = v
-                    func_name, func_type = get_str(ea, v, string_eas)
+                    # to avoid like the code below, check ea and the target ea do not belong to the same function.
+                    # this should be a siwtch-case structure but IDA does not recognize it as a switch-case.
+                    # jmp     dword ptr ds:(CopyUnwindUp_0+4)[eax*4]
+                    f = ida_funcs.get_func(ea)
+                    vf = ida_funcs.get_func(v)
+                    if is_indirect_jump_insn(ea):
+                        if f and vf and f.start_ea != vf.start_ea:
+                            target_ea = v
+                            func_name, func_type = get_str(ea, v, string_eas)
+                    # lea     eax, ds:0[ecx*4]
+                    # cmp     dword_1005EC64, 0
+                    else:
+                        target_ea = v
+                        func_name, func_type = get_str(ea, v, string_eas)
                     break
         # call    qword ptr [rsi+40h]
         # jmp     qword ptr [rsi+40h]
@@ -586,7 +608,7 @@ def get_funcptr_ea(ea, bbs, import_eas, string_eas):
                         break
     
     if func_type not in [FT_API, FT_MEM, FT_VAR, FT_STR, FT_STO, FT_VTB]:
-        func_type = get_func_type(target_ea, import_eas)
+        func_type = get_func_type(target_ea, import_eas, func_type)
     return target_ea, func_type, i, func_name
 
 def get_stroff_ea(ea, import_eas):
