@@ -906,7 +906,7 @@ def get_dref_belong_to_func(ea, vtbl_refs, dref_recursive=True, debug=False, dbg
                         yield next_ea, next_next_ea, ida_idaapi.BADADDR
                     else:
                         if debug: dbg_print("not yield data, data", "next_next_ea:", hex(next_next_ea).rstrip("L"), "next_ea:", hex(next_ea).rstrip("L"), "ea:", hex(ea).rstrip("L"))
-            # next_drefs list is emty but need to yield for next_ea
+            # next_drefs list is empty but need to yield for next_ea
             if len(next_drefs) == 0:
                 if debug: dbg_print("!!!!!! data, not for next ea", "next_ea:", hex(next_ea).rstrip("L"), "ea:", hex(ea).rstrip("L"))
                 yield ea, next_ea, ida_idaapi.BADADDR
@@ -968,7 +968,7 @@ def get_dref_from_belong_to_func(ea, dref_recursive=True, debug=False, dbg_print
                             yield next_ea, next_next_ea, ida_idaapi.BADADDR
                     else:
                         if debug: dbg_print("not yield data, data", "next_next_ea:", hex(next_next_ea).rstrip("L"), "next_ea:", hex(next_ea).rstrip("L"), "ea:", hex(ea).rstrip("L"))
-            # next_drefs list is emty but need to yield for next_ea
+            # next_drefs list is empty but need to yield for next_ea
             if len(next_drefs) == 0 and (not ida_struct.get_struc_name(next_ea) or ida_bytes.is_strlit(flags)):
                 if debug: dbg_print("!!!!!! data, not for next ea", "next_ea:", hex(next_ea).rstrip("L"), "ea:", hex(ea).rstrip("L"))
                 yield ea, next_ea, ida_idaapi.BADADDR
@@ -1230,7 +1230,7 @@ def drefs_wrapper(drefs, func_relations, direction, vtbl_refs, dref_recursive=Tr
                 func_type = FT_VAR
             if debug: dbg_print("yield struct member item", "ea:", hex(ea), "func_ea:", hex(func_ea), "dref_off_ea:", hex(dref_off_ea), "func_type:", func_type)
             yield (ea, func_ea, dref_off_ea, func_type)
-        # for an item in a structure and it points to in a middle of a funciton. e.g. 
+        # for an item in a structure and it points to in a middle of a function. e.g. 
         # dd offset loc_1001BECB
         elif ida_bytes.is_code(flags):
             func_type = get_dref_type(func_ea, func_type, func_relations)
