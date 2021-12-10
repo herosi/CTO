@@ -39,6 +39,9 @@ And use Python 3.x. It should work on Python 2.7 but I did not test enough and I
 - IDA_Signsrch  
   https://sourceforge.net/projects/idasignsrch/
 
+- SusanRTTI  
+  https://github.com/nccgroup/SusanRTTI
+
 ## How to Install
 See "[INSTALL](/INSTALL)" file.
 
