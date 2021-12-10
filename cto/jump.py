@@ -8,8 +8,8 @@ import ida_idaapi
 import ida_xref
 import idc
 
-import utils
-ida_idaapi.require("utils")
+#import cto_utils
+#ida_idaapi.require("cto_utils")
 
 def jump_to_func_ptr_line_pos(text, func_name, w, tweak=0, add_x=False):
     flag = False

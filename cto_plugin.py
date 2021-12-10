@@ -100,6 +100,7 @@ class cto_plugin_t(ida_idaapi.plugin_t):
             debug = True
             
         curr_view = None
+        max_depth = 1
         # for the first message when this plugin is launched by a user by pressing shortcut key or going to menu.
         if 'g_cto' not in globals():
             ida_kernwin.msg("Launching %s (%s) ...%s" % (self.wanted_name, self.comment, os.linesep))
@@ -107,6 +108,8 @@ class cto_plugin_t(ida_idaapi.plugin_t):
         else:
             ida_kernwin.msg("Reloading %s.%s" % (self.wanted_name, os.linesep))
             curr_view = g_cto.curr_view
+            if g_cto.max_depth > 1:
+                max_depth = g_cto.max_depth
             
         if self.g:
             ea = ida_kernwin.get_screen_ea()
@@ -134,7 +137,8 @@ class cto_plugin_t(ida_idaapi.plugin_t):
         sd = syncdata.sync_data()
         sync_data = sd.get()
         # execute the main function
-        self.g = cto.exec_cto(cto_data=sync_data, curr_view=curr_view, debug=debug)
+        self.g = cto.exec_cto(cto_data=sync_data, curr_view=curr_view, max_depth=max_depth, debug=debug)
+        self.g.exec_ui_action("EmptyStack")
         self.g.__dict__["sd"] = sd
         if sync_data is None:
             self.g.sd.set(self.g.cto_data)

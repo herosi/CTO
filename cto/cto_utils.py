@@ -3,11 +3,37 @@ import ida_funcs
 import ida_gdl
 import ida_idaapi
 import ida_kernwin
+import ida_strlist
+import ida_bytes
+
+import sys
 
 try:
     import collections.abc as colls
 except ImportError:
     import collections as colls
+
+def get_strlist_items():
+    si = ida_strlist.string_info_t()
+    for i in range(ida_strlist.get_strlist_qty()):
+        if ida_strlist.get_strlist_item(si, i):
+            yield si
+
+def get_str_content(si):
+    strbytes = ida_bytes.get_strlit_contents(si.ea, si.length, si.type, ida_bytes.STRCONV_ESCAPE)
+    if sys.version_info.major >= 3:
+         return strbytes.decode("UTF-8", "replace")
+    else:
+         return strbytes
+    return strbytes
+
+def get_str_content_by_ea(ea):
+    result = None
+    for si in get_strlist_items():
+        if si.ea == ea:
+            result = get_str_content(si)
+            break
+    return result
 
 def deep_update(source, overrides):
     """

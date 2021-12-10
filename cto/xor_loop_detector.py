@@ -7,9 +7,9 @@ import ida_bytes
 import idautils
 
 import loop_detector
-import utils
+import cto_utils
 ida_idaapi.require("loop_detector")
-ida_idaapi.require("utils")
+ida_idaapi.require("cto_utils")
 
 g_rename_prefix = ('sub_',)
 
@@ -73,7 +73,7 @@ def find_xor_loop(xor=False, comment=True, rename=False, cmt_prefix="CTO-"):
                 if func_ea in to_rename_funcs and "xorloop" == to_rename_funcs[func_ea]:
                     rename_flag = False
                 if rename_flag:
-                    xref_cnt = utils.count_xref(ea)
+                    xref_cnt = cto_utils.count_xref(ea)
                     to_rename_funcs[func_ea] = (annotation_type, xref_cnt)
             # set a comment to a xor or a xor loop
             if comment:

@@ -2,13 +2,13 @@
     "C++ vftables": {
         "regex": true,
         "cs": false,
-        "rule": "(vftables|`vftable')",
+        "rule": "(vftables|`vftable'|vtable_)",
 		"keywords": ["children", "vftables"]
     },
     "C++ vftables (non-standard vftable)": {
         "regex": true,
         "cs": false,
-        "rule": "const (?!std::).*::`vftable'$",
+        "rule": "(const (?!std::).*::`vftable'$|, offset vtable_(?!_std_))",
 		"keywords": []
     },
     "Possible C++ class w/o vftable": {
@@ -20,7 +20,7 @@
     "Possible C++ vftable access on x64": {
         "regex": true,
         "cs": false,
-        "rule": "lea     r..?, o",
+        "rule": "lea     r..?, off",
 		"keywords": ["children", "gvars"]
     },
     "xor instruction in a loop": {

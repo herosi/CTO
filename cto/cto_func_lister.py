@@ -22,19 +22,29 @@ import time
 
 import cto_base
 import syncui
-import utils
+import cto_utils
 import icon
 #import cto
 import get_func_relation
 ida_idaapi.require("cto_base")
 ida_idaapi.require("syncui")
-ida_idaapi.require("utils")
+ida_idaapi.require("cto_utils")
 ida_idaapi.require("icon")
 #ida_idaapi.require("cto")
 ida_idaapi.require("get_func_relation")
 
 if not hasattr(ida_kernwin, "WOPN_NOT_CLOSED_BY_ESC"):
     setattr(ida_kernwin, "WOPN_NOT_CLOSED_BY_ESC", 0x100) # 7.5 lacks the definition
+
+FT_UNK = get_func_relation.FT_UNK
+FT_GEN = get_func_relation.FT_GEN
+FT_LIB = get_func_relation.FT_LIB
+FT_API = get_func_relation.FT_API
+FT_MEM = get_func_relation.FT_MEM
+FT_VAR = get_func_relation.FT_VAR
+FT_STR = get_func_relation.FT_STR
+FT_STO = get_func_relation.FT_STO
+FT_VTB = get_func_relation.FT_VTB
 
 class MyFilterProxyModel(QtCore.QSortFilterProxyModel):
     itemDataChanged = QtCore.pyqtSignal(QtCore.QModelIndex, str, str, int)
@@ -668,16 +678,17 @@ class cto_func_lister_t(cto_base.cto_base, ida_kernwin.PluginForm):
                 callee_ea = self.func_relations[ea]["parents"][caller_ea][0]
                 #print("  %x" % callee_ea)
                 idx = self.get_idx_by_ea_and_eatype(callee_ea, "func")
-                root_item = self.model.itemFromIndex(idx)
-                for item in self.iter_items(root_item):
-                    item_ea, _, _, _ = self.get_ea_by_item(item)
-                    idx = self.model.indexFromItem(item)
-                    #print("item_ea %x" % item_ea)
-                    if caller_ea == item_ea and idx.column() == 0:
-                        #print("caller_ea:%x" % caller_ea)
-                        text = idc.generate_disasm_line(item_ea, 0)
-                        item.setText(text)
-                        item.setToolTip(text)
+                if idx is not None:
+                    root_item = self.model.itemFromIndex(idx)
+                    for item in self.iter_items(root_item):
+                        item_ea, _, _, _ = self.get_ea_by_item(item)
+                        idx = self.model.indexFromItem(item)
+                        #print("item_ea %x" % item_ea)
+                        if caller_ea == item_ea and idx.column() == 0:
+                            #print("caller_ea:%x" % caller_ea)
+                            text = idc.generate_disasm_line(item_ea, 0)
+                            item.setText(text)
+                            item.setToolTip(text)
         
     def clear_function(self, idx):
         if idx is not None:
@@ -704,7 +715,7 @@ class cto_func_lister_t(cto_base.cto_base, ida_kernwin.PluginForm):
             self.PopulateTree()
         else:
             # if ea is string, check string and update string name ...
-            for ea, func_ea, dref_off_ea in get_func_relation.get_dref_belong_to_func(orig_ea):
+            for ea, func_ea, dref_off_ea in get_func_relation.get_dref_belong_to_func(orig_ea, self.vtbl_refs):
                 self.update_function(func_ea)
                 
             # for general functions
@@ -716,10 +727,8 @@ class cto_func_lister_t(cto_base.cto_base, ida_kernwin.PluginForm):
             self.tree.filterChanged(filter_text)
             self.tree.setFocus()
         
-        # jump to the original ea
-        #self.jumpto(idc.get_inf_attr(idc.INF_MIN_EA))
-        #ida_kernwin.jumpto(idc.get_inf_attr(idc.INF_MIN_EA), -1, ida_kernwin.UIJMP_DONTPUSH)
-        self.jumpto(orig_ea)
+        # jump to the original ea and expand the item again
+        #self.jumpto(orig_ea)
         self.expand_item_by_ea(orig_ea)
             
     def force_reload(self):
@@ -1216,6 +1225,9 @@ class cto_func_lister_t(cto_base.cto_base, ida_kernwin.PluginForm):
         # detect notable consts
         elif c == 'C' and state == CTRL:
             self.find_notable_const()
+        # search notable instructions
+        elif c == 'I' and state == ALT:
+            self.find_notable_inst()
         # detect notable mnems
         elif c == 'M' and state & (ALT|SHIFT):
             self.find_notable_mnem()
@@ -1255,6 +1267,7 @@ Alt+P: edit function (this option redirects to IDA View-A so that you can use it
 Ctrl+X: detect Xor instructions in a loop.
 Alt+Shift+M: detect several important mnemonics.
 Ctrl+C: detect several important immediate values.
+Alt+I: search important instructions.
 ESC: Clear the filter on the filter bar. Move back of the IDA's location history.
 Ctrl+Enter: Move forward  of the IDA's location history.
 Ctrl+F: display/hide Filter bar.
@@ -1416,19 +1429,30 @@ D: enable/disable Debug mode
         func_name = self.get_name(func_ea)
         func_name, ifunc, idx = self.RegisterFuncToTree(root, func_ea, func_name, self.funcs, self.func_ids, row=row)
         for keyword in self.func_relations[func_ea]:
+            # skip func_type column
             if keyword == "func_type":
                 continue
             
             self.tree.keywords[keyword] = True
             
+            # skip keyword insertion if the keyword list is empty
             if len(self.func_relations[func_ea][keyword]) == 0:
                 continue
             
-            ikey = QtGui.QStandardItem("%s" % (keyword))
-            ikey.setEditable(False)
-            ifunc.appendRow(ikey)
-        
+            first_insertion = True
             for caller in sorted(self.func_relations[func_ea][keyword]):
+                # skip a child func type is one of these ones.
+                if keyword == "children":
+                    callee, func_type, _, _ = self.func_relations[func_ea][keyword][caller]
+                    if func_type in [FT_STO, FT_STR, FT_VAR]:
+                        continue
+                # add keyword node for the first insertion
+                if first_insertion:
+                    ikey = QtGui.QStandardItem("%s" % (keyword))
+                    ikey.setEditable(False)
+                    ifunc.appendRow(ikey)
+                    first_insertion = False
+                # add caller to the tree
                 disasm, icaller, idx = self.RegisterCallerToTree(ikey, caller, keyword, func_ea)
                 if keyword == "vftables":
                     for vtbl_off in sorted(self.func_relations[func_ea][keyword][caller]):
@@ -1468,8 +1492,8 @@ D: enable/disable Debug mode
     def RegisterFuncToTree(self, parent, func_ea, func_name, ea_dict, idx_dict, other_data=None, row=-1):
         ifunc_name = QtGui.QStandardItem("%s" % (func_name))
         ifunc_addr = QtGui.QStandardItem("%x" % (func_ea))
-        ifunc_xref_cnt = QtGui.QStandardItem("%d" % (utils.count_xref(func_ea)))
-        ifunc_bb_cnt = QtGui.QStandardItem("%d" % (utils.count_bbs(func_ea)))
+        ifunc_xref_cnt = QtGui.QStandardItem("%d" % (cto_utils.count_xref(func_ea)))
+        ifunc_bb_cnt = QtGui.QStandardItem("%d" % (cto_utils.count_bbs(func_ea)))
         ifunc_name.setToolTip(func_name)
         ifunc_addr.setEditable(False)
         ifunc_xref_cnt.setEditable(False)

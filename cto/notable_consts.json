@@ -22,7 +22,10 @@
         "0xE9": {"name": "jmp instruction (long)", "optype":[], "mnems":[], "opn":[], "opsz":[1]},
         "0xEB": {"name": "jmp instruction (short)", "optype":[], "mnems":[], "opn":[], "opsz":[1]},
         "0xC3": {"name": "ret instruction", "optype":[], "mnems":[], "opn":[], "opsz":[1]},
-        "0x8664": {"name": "IMAGE_FILE_MACHINE_AMD64", "optype":[], "mnems":[], "opn":[], "opsz":[]}
+        "0x8664": {"name": "IMAGE_FILE_MACHINE_AMD64", "optype":[], "mnems":[], "opn":[], "opsz":[]},
+        "0x555555555555555": {"name": "max list size for VC++ 2019 x64", "optype":[], "mnems":[], "opn":[], "opsz":[]},
+        "0x83828180": {"name": "LZO_UINT32_C_LE", "optype":[], "mnems":[], "opn":[], "opsz":[]},
+        "0x80818283": {"name": "LZO_UINT32_C_BE", "optype":[], "mnems":[], "opn":[], "opsz":[]}
     },
     "multiple":{
         "PE Sec": {

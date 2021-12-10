@@ -22,10 +22,11 @@ import tinfo
 import config_base
 import debug_print
 import comments
-import utils
+import cto_utils
 import xor_loop_detector
 import notable_mnem_finder
 import notable_const_finder
+import notable_inst_finder
 
 ida_idaapi.require("get_func_relation")
 ida_idaapi.require("cache_data")
@@ -34,10 +35,11 @@ ida_idaapi.require("tinfo")
 ida_idaapi.require("config_base")
 ida_idaapi.require("debug_print")
 ida_idaapi.require("comments")
-ida_idaapi.require("utils")
+ida_idaapi.require("cto_utils")
 ida_idaapi.require("xor_loop_detector")
 ida_idaapi.require("notable_mnem_finder")
 ida_idaapi.require("notable_const_finder")
+ida_idaapi.require("notable_inst_finder")
 
 FT_UNK = get_func_relation.FT_UNK
 FT_GEN = get_func_relation.FT_GEN
@@ -46,6 +48,7 @@ FT_API = get_func_relation.FT_API
 FT_MEM = get_func_relation.FT_MEM
 FT_VAR = get_func_relation.FT_VAR
 FT_STR = get_func_relation.FT_STR
+FT_STO = get_func_relation.FT_STO
 FT_VTB = get_func_relation.FT_VTB
 
 class cto_base(debug_print.debug):
@@ -151,7 +154,7 @@ class cto_base(debug_print.debug):
             
         # get comments and merge them
         cmts = self.cmt_obj.collect_cmts_as_dict()
-        utils.deep_update(self.cto_data["cto_data"]["func_relations"], cmts)
+        cto_utils.deep_update(self.cto_data["cto_data"]["func_relations"], cmts)
         
         # recursive for instance
         for inst in self.cto_data["insts"]:
@@ -194,7 +197,10 @@ class cto_base(debug_print.debug):
                 self._partial_cache_update(ea)
         elif f and f.start_ea in self.func_relations:
             self._partial_cache_update(f.start_ea)
-                
+        else:
+            # updating paths cache (just removing paths related to the ea)
+            self.remove_paths_cache(ea)
+    
     def _partial_cache_update(self, ea):
         # updating a function that the ea belongs to.
         f, bbs = get_func_relation.get_func_bbs(ea)
@@ -203,8 +209,9 @@ class cto_base(debug_print.debug):
         parents, children, apicalls, gvars, strings, stroff, vtbl = get_func_relation.get_family_members(ea, bbs, self.import_eas, self.string_eas)
         func_type = get_func_relation.get_func_type(ea, self.import_eas)
         self.func_relations[ea] = {"parents":parents, "children":children, "func_type":func_type, "gvars":gvars, "strings":strings, "struct_offsets":stroff, "vftables":vtbl , "cmt":{}, "rcmt":{}}
+        get_func_relation.fix_parent(self.func_relations, self.vtbl_refs, ea)
         cmts = self.cmt_obj.collect_cmts_as_dict(ea)
-        utils.deep_update(self.func_relations, cmts)
+        cto_utils.deep_update(self.func_relations, cmts)
         
         # updating apicalls that are called in the function
         for api_ea in apicalls:
@@ -229,6 +236,9 @@ class cto_base(debug_print.debug):
             self.dyn_apicalls[caller] = func_name
             
         # updating paths cache (just removing paths related to the ea)
+        self.remove_paths_cache(ea)
+            
+    def remove_paths_cache(self, ea):
         to_be_removed = set([])
         for k in self.paths_cache:
             if ea in [k[0], k[1]]:
@@ -640,7 +650,7 @@ class cto_base(debug_print.debug):
         return self._get_highlighted_name(ea, w)
     
     def get_widget(self):
-        w, wt = utils.get_widget(curr_view=self.curr_view)
+        w, wt = cto_utils.get_widget(curr_view=self.curr_view)
         return w, wt
     
     def get_focus(self, w=None):
@@ -696,6 +706,14 @@ class cto_base(debug_print.debug):
         c = notable_const_finder.notable_const_t()
         for func_ea, const_ea, val, rule_name in c.collect_notable_consts():
             ida_kernwin.msg("%x %x, %x, %s%s" % (func_ea, const_ea, val, rule_name, os.linesep))
+        self.cache_cmt_update()
+        self.refresh_all()
+        
+    def find_notable_inst(self):
+        ida_kernwin.msg("Checking notable instructions...%s" % (os.linesep))
+        i = notable_inst_finder.notable_inst_t()
+        for inst_ea, rule_name, disasm in i.collect_notable_insts():
+            ida_kernwin.msg("%x: %s: %s%s" % (inst_ea, rule_name, disasm, os.linesep))
         self.cache_cmt_update()
         self.refresh_all()
         

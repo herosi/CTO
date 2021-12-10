@@ -37,6 +37,7 @@ class my_ui_hooks_t(ida_kernwin.UI_Hooks):
         self.func_rcmt = ""
         self.rcmt = ""
         self.line = ""
+        self.func = None
         
         self.decomp_avail = False
         try:
@@ -67,13 +68,13 @@ class my_ui_hooks_t(ida_kernwin.UI_Hooks):
         if ea in self.v().func_relations:
             r = True
         elif f and f.start_ea in self.v().func_relations:
-            for ft in self.v().func_relations[f.start_ea]:
-                if ft == "func_type":
+            for k in self.v().func_relations[f.start_ea]:
+                if k == "func_type":
                     continue
-                if ea in self.v().func_relations[f.start_ea][ft]:
+                if ea in self.v().func_relations[f.start_ea][k]:
                     r = True
                     break
-                if ea in [self.v().func_relations[f.start_ea][ft][x][0] for x in self.v().func_relations[f.start_ea][ft]]:
+                if ea in [self.v().func_relations[f.start_ea][k][x][0] for x in self.v().func_relations[f.start_ea][k] if len(self.v().func_relations[f.start_ea][k][x]) > 0]:
                     r = True
                     break
         elif ea in self.v().import_eas:
@@ -147,6 +148,15 @@ class my_ui_hooks_t(ida_kernwin.UI_Hooks):
         elif self.cmdname == 'OpStructOffset':
             if f and self.is_ea_to_be_processed(f.start_ea):
                 self.line = ida_lines.tag_remove(ida_kernwin.get_curline())
+        elif self.cmdname == 'JumpText':
+            self.ask_next_text()
+        elif self.cmdname == 'AskNextText':
+            self.ask_next_text()
+        elif self.cmdname == 'msglist:FindNext':
+            self.ask_next_text()
+        # observing make a function and renew the cache
+        elif self.cmdname == 'MakeFunction':
+            self.make_func(ea, f)
         return 0
             
     def postprocess_action(self):
@@ -226,14 +236,14 @@ class my_ui_hooks_t(ida_kernwin.UI_Hooks):
                         self.func_rcmt = None
                 rcmt = ida_bytes.get_cmt(ea, 1)
                 self._log("prev: ", self.rcmt, "curr:", rcmt)
-                if rcmt != self.rcmt:
+                if rcmt != self.rcmt and f:
                     refresh_flag = True
                     self.v().partial_cache_update(f.start_ea)
                 self.rcmt = None
             elif self.is_ea_to_be_processed(ea):
                 rcmt = ida_bytes.get_cmt(ea, 1)
                 self._log("prev: ", self.rcmt, "curr:", rcmt)
-                if rcmt != self.rcmt:
+                if rcmt != self.rcmt and f:
                     refresh_flag = True
                     self.v().partial_cache_update(f.start_ea)
                 self.rcmt = None
@@ -268,13 +278,27 @@ class my_ui_hooks_t(ida_kernwin.UI_Hooks):
                     self.update_tif(ea)
                     refresh_flag = True
                 self.line = None
+        # for checking theme change
         elif self.cmdname == 'SetColors':
             refresh_flag = self.chk_dark_mode()
+        # do not reload while searching text
+        elif self.cmdname == 'JumpText':
+            self.after_ask_next_text()
+        elif self.cmdname == 'AskNextText':
+            self.after_ask_next_text()
+        elif self.cmdname == 'msglist:FindNext':
+            self.after_ask_next_text()
+        # observing make a function and renew the cache
+        elif self.cmdname == 'MakeFunction':
+            refresh_flag = self.after_make_func(ea, f)
             
         if refresh_flag:
             self._log("refresh_flag is true. refreshing...")
             #self.v().refresh_all(ea)
             self.refresh_all(ea)
+            
+        # reset the command name
+        self.cmdname = "<no command>"
         return 0
 
     def refresh(self, ea=ida_idaapi.BADADDR, center=False):
@@ -293,6 +317,24 @@ class my_ui_hooks_t(ida_kernwin.UI_Hooks):
     def chk_dark_mode(self):
         return False
 
+    def ask_next_text(self):
+        return False
+    
+    def after_ask_next_text(self):
+        return False
+    
+    def make_func(self, ea, f):
+        self.func = f
+        return False
+    
+    def after_make_func(self, ea, f):
+        if not self.func and f:
+            self.v().partial_cache_update(ea)
+            self.v().use_internal_function_cache = False
+            return True
+        self.func = None
+        return False
+    
     """
     def screen_ea_changed(self, ea, prev_ea):
         self._log("Screen EA has been changed from %x to %x" % (prev_ea, ea))

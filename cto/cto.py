@@ -28,13 +28,13 @@ import tinfo
 import cto_base
 import icon
 import syncui
-#import xor_loop_detector
+import cto_utils
 ida_idaapi.require("get_func_relation")
 ida_idaapi.require("tinfo")
 ida_idaapi.require("cto_base")
 ida_idaapi.require("icon")
 ida_idaapi.require("syncui")
-#ida_idaapi.require("xor_loop_detector")
+ida_idaapi.require("cto_utils")
 
 g_max_recursive = 10
 
@@ -45,6 +45,7 @@ FT_API = get_func_relation.FT_API
 FT_MEM = get_func_relation.FT_MEM
 FT_VAR = get_func_relation.FT_VAR
 FT_STR = get_func_relation.FT_STR
+FT_STO = get_func_relation.FT_STO
 FT_VTB = get_func_relation.FT_VTB
 
 if not hasattr(ida_kernwin, "WOPN_NOT_CLOSED_BY_ESC"):
@@ -153,6 +154,18 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                 self.v().color_all_nodes()
                 self.v().change_widget_icon(bg_change=self.v().config.dark_mode)
                 
+            def ask_next_text(self):
+                # if you do not unhook ui, IDA sometimes crashes.
+                self.v().my_view_hooks.unhook()
+                self.v().dont_auto_reload = True
+                return False
+            
+            def after_ask_next_text(self):
+                # hook ui again after find text.
+                self.v().my_view_hooks.hook()
+                self.v().dont_auto_reload = False
+                return False
+            
             def chk_dark_mode(self):
                 refresh_flag = False
                 if self.v().is_dark_mode_with_main():
@@ -198,12 +211,25 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                 if self.v().config.debug:
                     self._log("Click on the node id %d, was on %d" % (now_node, was_node))
 
+                # remove the previous node frame color
+                if now_node != was_node:
+                    if was_node in self.v().node_ids:
+                        self.v().color_node(was_node)
+                        
                 if now_node >= 0 and now_node != was_node:
                             
                     if now_node in self.v().node_ids:
                         if self.v().config.debug:
                             self._log("Click on the node id %d in node_ids list" % (now_node))
                                     
+                        if now_node < len(self.v()._nodes):
+                            if self.v().config.center_node and not self.v().is_node_in_canvas(now_node):
+                                self.v().do_center_node(now_node)
+                            ni = ida_graph.node_info_t()
+                            ni.frame_color = self.v().selected_frame_color
+                            ni.bg_color    = self.v().selected_bg_color
+                            self.v().SetNodeInfo(now_node, ni, ida_graph.NIF_BG_COLOR|ida_graph.NIF_FRAME_COLOR)
+                            
                         # jump to the ea corresponded to the now_node in IDA View-A.
                         # this jump leads to another view_loc_changed event for the CTO widget that will call self.update_widget_b() above.
                         self.v().jumpto(self.v().node_ids[now_node])
@@ -212,7 +238,7 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
             def update_widget_b_ea(self, now_ea, was_ea):
                 if self.v().config.debug:
                     self._log("now_ea: %x, was_ea: %x" % (now_ea, was_ea))
-
+                    
                 w = ida_kernwin.get_current_widget()
                 does_use_opn = self.v().does_use_opn()
                 nid = -1
@@ -255,10 +281,10 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                         wnid = self.v().nodes[was_ea]
                         if wnid < len(self.v()._nodes):
                             self.v().color_node(wnid)
-                        if was_ea in self.v().caller_nodes:
-                            wnid = self.v().caller_nodes[was_ea]
-                            if wnid < len(self.v()._nodes) and ((wnid != nid and does_use_opn) or not does_use_opn):
-                                self.v().color_node(wnid)
+                    if was_ea in self.v().caller_nodes:
+                        wnid = self.v().caller_nodes[was_ea]
+                        if wnid < len(self.v()._nodes):
+                            self.v().color_node(wnid)
                 elif now_ea == was_ea:
                     if was_ea in self.v().caller_nodes:
                         wnid = self.v().caller_nodes[was_ea]
@@ -270,10 +296,6 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                     item = None
                     if ve.rtype in [ida_kernwin.TCCRT_GRAPH, ida_kernwin.TCCRT_PROXIMITY]:
                         item = ve.location.item
-                    #if item is not None:
-                    #    # push now node to the locaction history on the CTO window
-                    #    if item.is_node:
-                    #        r = self.v().push_lochist_jump(w)
                             
         # wait until IDA gets ready
         r = ida_auto.auto_wait()
@@ -342,7 +364,7 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                 # node type
                 node_type = "Unknown"
                 if i in self.v().node_types:
-                    node_type = self.v().node_types[i]
+                    node_type, func_type, caller = self.v().node_types[i]
                 items.append((str(i), address, text_displayed, node_type, has_exceeded_node))
             
             return items
@@ -781,6 +803,7 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                         self.sub_graphs[i].Refresh()
                         if saved_ea not in self.sub_graphs[i].nodes:
                             self.sub_graphs[i].select(0)
+            self.jumpto(saved_ea)
                 
             #self.exec_ui_action("GraphLayout")
             if self.config.debug: self.dbg_print("Refreshed!")
@@ -1095,6 +1118,7 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                 ar_st_libs = set([])
                 ar_mem_calls = set([])
                 ar_gen_calls = set([])
+                ar_vtb_refs = set([])
                 for caller, (func_ea, func_type, op, func_name) in [(x, self.func_relations[ea]['children'][x]) for x in self.func_relations[ea]['children']]:
                     if func_name:
                         name = func_name + " (" + hex(caller).rstrip("L") + ")"
@@ -1104,9 +1128,13 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                         ar_apis.add(name)
                     elif func_type == FT_LIB:
                         ar_st_libs.add(name)
+                    elif func_type == FT_VTB:
+                        ar_vtb_refs.add(name)
                     elif func_type == FT_MEM and func_ea == ida_idaapi.BADADDR:
                         name = "%x: %s" % (caller, self.get_space_removed_disasm(caller))
                         ar_mem_calls.add(name)
+                    elif func_type in [FT_STR, FT_VAR, FT_STO]:
+                        pass
                     else:
                         ar_gen_calls.add(name)
 
@@ -1119,6 +1147,11 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                     ar_result.append("")
                     ar_result.append("[Static Linked Libraries]")
                     self.append_result_every_given_items(ar_st_libs, ar_result)
+            
+                if len(ar_vtb_refs) > 0:
+                    ar_result.append("")
+                    ar_result.append("[Vftables]")
+                    self.append_result_every_given_items(ar_vtb_refs, ar_result)
             
                 if len(ar_mem_calls) > 0:
                     ar_result.append("")
@@ -2175,21 +2208,30 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
             self.config.show_strings_nodes = not self.config.show_strings_nodes
             ## remove past navigation history of this graph.
             self.use_internal_function_cache = False
+            # to avoid orphan nodes, clear additional points and other internal caches and build the tree from scratch
+            self.clear_internal_caches(all_clear=True)
             self.refresh_with_center_node()
+            self.exec_ui_action("EmptyStack")
             ida_kernwin.msg("Strings %sabled%s" % ("en" if self.config.show_strings_nodes else "dis", os.linesep))
         # show referred global/static Variables in functions
         elif c == 'V' and state == 0:
             self.config.show_gvars_nodes = not self.config.show_gvars_nodes
             ## remove past navigation history of this graph.
             self.use_internal_function_cache = False
+            # to avoid orphan nodes, clear additional points and other internal caches and build the tree from scratch
+            self.clear_internal_caches(all_clear=True)
             self.refresh_with_center_node()
+            self.exec_ui_action("EmptyStack")
             ida_kernwin.msg("global/static Variables %sabled%s" % ("en" if self.config.show_gvars_nodes else "dis", os.linesep))
         # show structure member access in functions
         elif c == 'T' and state == SHIFT:
             self.config.show_stroff_nodes = not self.config.show_stroff_nodes
             ## remove past navigation history of this graph.
             self.use_internal_function_cache = False
+            # to avoid orphan nodes, clear additional points and other internal caches and build the tree from scratch
+            self.clear_internal_caches(all_clear=True)
             self.refresh_with_center_node()
+            self.exec_ui_action("EmptyStack")
             ida_kernwin.msg("sTructure members %sabled%s" % ("en" if self.config.show_stroff_nodes else "dis", os.linesep))
         # show cOmments in functions
         elif c == 'O' and state == 0:
@@ -2197,24 +2239,30 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
             ## remove past navigation history of this graph.
             self.use_internal_function_cache = False
             self.refresh_with_center_node()
+            self.exec_ui_action("EmptyStack")
             ida_kernwin.msg("cOmments %sabled%s" % ("en" if self.config.show_comment_nodes else "dis", os.linesep))
         # show unresolved Indrect calls
         elif c == 'I' and state == 0:
             self.config.show_indirect_calls = not self.config.show_indirect_calls
             self.use_internal_function_cache = False
+            # to avoid orphan nodes, clear additional points and other internal caches and build the tree from scratch
+            self.clear_internal_caches(all_clear=True)
             self.refresh_with_center_node()
+            self.exec_ui_action("EmptyStack")
             ida_kernwin.msg("unresolved Indirect Calls %sabled%s" % ("en" if self.config.show_indirect_calls else "dis", os.linesep))
         # disable to display cAller functions
         elif c == 'A' and state == 0:
             self.config.skip_caller = not self.config.skip_caller
             self.use_internal_function_cache = False
             self.refresh_with_center_node()
+            self.exec_ui_action("EmptyStack")
             ida_kernwin.msg("skip cAller %sabled%s" % ("en" if self.config.skip_caller else "dis", os.linesep))
         # show Parent's children node
         elif c == 'P' and state == 0:
             self.config.display_children_in_parent_funcs = not self.config.display_children_in_parent_funcs
             self.use_internal_function_cache = False
             self.refresh_with_center_node()
+            self.exec_ui_action("EmptyStack")
             ida_kernwin.msg("display child nodes in Parent functions %sabled%s" % ("en" if self.config.display_children_in_parent_funcs else "dis", os.linesep))
         # Update func relations
         elif c == 'U' and state == 0:
@@ -2261,6 +2309,17 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
         # go to an address or an address of a function name
         elif c == 'G' and state == 0:
             self.exec_ida_ui_action("JumpAsk")
+            """
+            new_ea = ida_kernwin.get_screen_ea()
+            if self.config.auto_reload_outside_node and new_ea not in self.nodes and new_ea not in self.caller_nodes:
+                if new_ea in self.vtbl_refs:
+                    new_ea = self.vtbl_refs[new_ea]
+                # change the primary node and rebuild the tree
+                self.force_reload(new_ea)
+                
+                # take focus back on the current widget
+                self.get_focus()
+            """
         # rename a function
         elif c == 'N' and state == 0:
             flag = self.check_and_rename_var()
@@ -2303,14 +2362,30 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
             ida_kernwin.msg("the maximum depth is one." + os.linesep)
             self.max_depth = 1
             self.use_internal_function_cache = False
-            self.refresh()
+            self.clear_internal_caches(all_clear=True)
+            self.refresh_with_center_node()
+            self.jumpto(self.start_ea)
+            # CTO needs to clear the navigation history to avoid crash IDA.
+            # If you access a node that has a high number after expanding tree with "+" key and
+            # then "-" key to shrink the tree and then press escape key to try to return to the previous location,
+            # IDA will crash because CTO does not have the node anymore but CTO tries to access it.
+            self.exec_ida_ui_action("EmptyStack")
+            self.exec_ui_action("EmptyStack")
         # decrease the maximum depth to dig deeper
         elif c == '-':
             if self.max_depth > 1:
                 self.max_depth -= 1
                 ida_kernwin.msg("the maximum depth is now %d.%s" % (self.max_depth, os.linesep))
                 self.use_internal_function_cache = False
+                # to avoid orphan nodes, clear additional points and other internal caches and build the tree from scratch
+                self.clear_internal_caches(all_clear=True)
                 self.refresh_with_center_node()
+                # CTO needs to clear the navigation history to avoid crash IDA.
+                # If you access a node that has a high number after expanding tree with "+" key and
+                # then "-" key to shrink the tree and then press escape key to try to return to the previous location,
+                # IDA will crash because CTO does not have the node anymore but CTO tries to access it.
+                self.exec_ida_ui_action("EmptyStack")
+                self.exec_ui_action("EmptyStack")
             else:
                 ida_kernwin.msg("the maximum depth is already one." + os.linesep)
         # increase the maximum depth to dig deeper
@@ -2320,6 +2395,12 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                 ida_kernwin.msg("the maximum depth is now %d.%s" % (self.max_depth, os.linesep))
                 self.use_internal_function_cache = False
                 self.refresh_with_center_node()
+                # CTO needs to clear the navigation history to avoid crash IDA.
+                # If you access a node that has a high number after expanding tree with "+" key and
+                # then "-" key to shrink the tree and then press escape key to try to return to the previous location,
+                # IDA will crash because CTO does not have the node anymore but CTO tries to access it.
+                self.exec_ida_ui_action("EmptyStack")
+                self.exec_ui_action("EmptyStack")
             else:
                 ida_kernwin.msg("the maximum depth (%d) or the number of the nodes (%d) is too big. Expand a node you want manually.%s" % (self.max_depth, len(self.nodes), os.linesep))
         # show portable config information
@@ -2338,6 +2419,9 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
         # detect notable consts
         elif c == 'C' and state == CTRL:
             self.find_notable_const()
+        # search notable instructions
+        elif c == 'I' and state == ALT:
+            self.find_notable_inst()
         # detect notable mnems
         elif c == 'M' and state & (ALT|SHIFT):
             self.find_notable_mnem()
@@ -2406,6 +2490,7 @@ Shift+T: enable/disable to show sTructure members as nodes.
 Ctrl+X: detect Xor instructions in a loop.
 Alt+Shift+M: detect several important mnemonics.
 Ctrl+C: detect several important immediate values.
+Alt+I: search important instructions.
 C: enable/disable Centering the node you are looking at on the call graph window.
 D: enable/disable Debug mode
 _: print several important internal caches for debugging.
@@ -2484,6 +2569,12 @@ _: print several important internal caches for debugging.
             color = self.api_color
         elif func_type == FT_LIB:
             color = self.lib_color
+        elif func_type == FT_STO:
+            color = self.stroff_color
+        elif func_type == FT_STR:
+            color = self.strings_color
+        elif func_type == FT_VAR:
+            color = self.gvars_color
         return color
     
     # for string color for callee nodes
@@ -2520,17 +2611,13 @@ _: print several important internal caches for debugging.
 
     # I can get a disassembly line with string color tag as I use the API in ida_lines.
     def get_space_removed_disasm(self, ea, remove_comment=True):
-        #disasm = idc.generate_disasm_line(ea, 0)
         flags = ida_bytes.get_flags(ea)
         if ida_bytes.is_data(flags):
             disasm = ida_lines.generate_disasm_line(ea, 0)
         else:
             disasm = self.rm_space_rule.sub(" ", ida_lines.generate_disasm_line(ea, 0))
-        #rcmt = ida_bytes.get_cmt(ea, 1)
-        #if self.remove_comment and remove_comment and not(self.config.show_comment_nodes and rcmt):
         if self.remove_comment and remove_comment and not self.config.show_comment_nodes:
             disasm = disasm.split(";", 1)[0].strip()
-        #if self.config.show_comment_nodes and rcmt:
         if self.config.show_comment_nodes:
             disasm = disasm[:self.maximum_comment_length+ida_lines.tag_strlen(disasm)]
         return disasm
@@ -2542,21 +2629,28 @@ _: print several important internal caches for debugging.
         f = ida_funcs.get_func(ea)
         if func_type == FT_API:
             func_name = ida_name.get_name(ea)
-        elif func_type == FT_GEN and func_flags & ida_funcs.FUNC_THUNK:
-            func_name = self.get_space_removed_disasm(ea)
+        #elif func_type == FT_GEN:
+        #    if f and func_flags & ida_funcs.FUNC_THUNK and ea in self.caller_nodes:
+        #        func_name = self.get_space_removed_disasm(ea)
         elif func_type == FT_VTB:
             func_name = ida_name.get_name(ea)
         elif func_type == FT_STR:
             func_name = ida_name.get_name(ea)
         elif func_type == FT_VAR:
             func_name = ida_name.get_name(ea)
+            head_ea = ida_bytes.get_item_head(ea)
+            # for in the middle of a struct
+            if ea != head_ea and not func_name:
+                func_name = ida_name.get_name(head_ea)
         if self.config.debug: self.dbg_print("func name in the middle:%s" % (func_name))
         if not func_name:
-            func_name = hex(ea).rstrip("L")
+            func_name = ida_name.get_name(ea)
         # for a func chunk but it's located in a different segment or something like that.
         # it happens in a certain type of packer.
         elif f and ea != f.start_ea:
             func_name = ida_name.get_name(ea)
+        if not func_name:
+            func_name = hex(ea).rstrip("L")
         if self.config.debug: self.dbg_print("func name at last:%s" % (func_name))
         return self.color_callee_str(func_name, func_type)
     
@@ -2655,98 +2749,15 @@ _: print several important internal caches for debugging.
         bg_color = self.get_bgcolor(node_tl_x+adjustment, node_tl_y+adjustment, w)
         self.color_node(nid)
         return bg_color
-    """
-    @staticmethod
-    def _is_dark_mode(bgcolor, threshold=128):
-        if bgcolor >= 0:
-            alpha = bgcolor >> 24
-            bgcolor &= 0xffffff
-            green = bgcolor >> 16
-            blue = (bgcolor >> 8) & 0xff
-            red = bgcolor & 0xff
-            #print("%x, %x, %x, %x, %x" % (bgcolor, green, blue, red, alpha))
-            if green < threshold and blue < threshold and red < threshold:
-                return True
-        return False
-    """
     
     def is_dark_mode(self, w=None):
         if w is None:
             w = self.GetWidget()
         if w is None:
             return False
-
-        """
-        x, y = self.get_widget_offset(w)
-        if x is None:
-            x = 0
-        if y is None:
-            y = 0
-        """
         
-        #bgcolor = self.get_bgcolor(x, y, w)
         bgcolor = self.get_node_default_bgcolor(w)
         return self._is_dark_mode(bgcolor)
-        
-    """
-    @staticmethod
-    def get_main_window():
-        try:
-            from PyQt5 import QtWidgets
-        except ImportError:
-            return None
-        
-        widget = QtWidgets.QApplication.activeWindow()
-        QtWidgets.QApplication.focusWidget()
-        for widget in [QtWidgets.QApplication.activeWindow(), QtWidgets.QApplication.focusWidget()] + QtWidgets.QApplication.topLevelWidgets():
-            while widget:
-                if isinstance(widget, QtWidgets.QMainWindow):
-                    break
-                widget = widget.parent()
-            if isinstance(widget, QtWidgets.QMainWindow):
-                return widget
-        return None
-    
-    @staticmethod
-    def is_dark_mode_with_main():
-        try:
-            from PyQt5 import QtWidgets
-        except ImportError:
-            return False
-
-        widget = CallTreeOverviewer.get_main_window()
-        if not isinstance(widget, QtWidgets.QMainWindow):
-            return False
-        bgcolor = CallTreeOverviewer.get_bgcolor(x=0, y=0, w=widget)
-        if bgcolor < 0:
-            return False
-        return CallTreeOverviewer._is_dark_mode(bgcolor)
-        
-    @staticmethod
-    def get_bgcolor(x=0, y=0, w=None):
-        bgcolor = -1
-        if w is None:
-            return bgcolor
-        
-        try:
-            import sip
-            from PyQt5 import QtCore
-            from PyQt5 import QtWidgets
-            from PyQt5 import QtGui
-        except ImportError:
-            return bgcolor
-        
-        if str(w).startswith("<Swig Object of type 'TWidget *' at") and str(type(w)) in ["<class 'SwigPyObject'>", "<type 'SwigPyObject'>"]: # type: for py2, class: for py3
-            widget = sip.wrapinstance(int(w), QtWidgets.QWidget)
-        else:
-            widget = w
-            
-        pixmap = widget.grab(QtCore.QRect(x, y, x+1, y+1))
-        image = QtGui.QImage(pixmap.toImage())
-        bgcolor = image.pixel(0, 0)
-        
-        return bgcolor
-    """
         
     # this is available after drawing. Do not use it before or during drawing process.
     def _find_src_nodes_from_edges(self, nid, text=""):
@@ -2895,6 +2906,7 @@ _: print several important internal caches for debugging.
                 dst_ea = self.exceeded_node_ids[dst]
                 dst_list_name = "exceeded_nodes"
             if self.config.debug: self.dbg_print("Adding an edge src: %x (%d, %s), dst: %x (%d, %s) from %s:%d" % (src_ea, src, src_list_name, dst_ea, dst, dst_list_name, function, lineno))
+        '''
         # for a certain packer
         # even if a node is a part of a function and is a callee node and its ea is not at a function head, this script connects this node to destination.
         # but it's not correct. so I skip to insert an edge for the cases except for a correct callee and caller pair.
@@ -2910,7 +2922,12 @@ _: print several important internal caches for debugging.
                         add_flag = False
                         for direction in ["parents", "children", "gvars", "strings", "struct_offsets"]:
                             for caller in self.func_relations[f.start_ea][direction]:
-                                callee, _, _, _ = self.func_relations[f.start_ea][direction][caller]
+                                if caller in self.func_relations[f.start_ea][direction]:
+                                    callee, ftype, _, _ = self.func_relations[f.start_ea][direction][caller]
+                                    if ftype == FT_VTB and callee in self.func_relations[f.start_ea]["vftables"]:
+                                        add_flag = True
+                                        #vfunc = self.func_relations[f.start_ea]["vftables"][callee]
+                                
                                 if caller == src_ea and callee == dst_ea:
                                     add_flag = True
                                     break
@@ -2960,6 +2977,7 @@ _: print several important internal caches for debugging.
                 else:
                     if self.config.debug: self.dbg_print("Skipping adding an edge src: %x (%d, %s), dst: %x (%d, %s) from %s:%d because this pair does not have proper callee/caller relationships." % (src_ea, src, src_list_name, dst_ea, dst, dst_list_name, function, lineno))
                     return None
+        '''
                 
         self.AddEdge(src, dst)
         if src in self.node_id_relationships:
@@ -3004,25 +3022,49 @@ _: print several important internal caches for debugging.
                 else:
                     self.related_nodes[start_ea] = set([ea])
 
-    def update_node_type(self, nid, node_type):
-        if nid in self.node_ids and self.start_ea == self.node_ids[nid]:
-            node_type = "Primary Node"
-        if  nid in self.node_ids and self.node_ids[nid] in self.eps:
-            node_type = "Entry Point"
-        if nid in self.node_ids and self.node_ids[nid] in self.func_relations:
-            func_type = self.func_relations[self.node_ids[nid]]['func_type']
+    def get_node_type(self, func_type=FT_UNK, caller=False):
+        node_type="Callee"
+        if caller:
+            node_type="Caller"
+            
+        if func_type == FT_STR:
+            node_type = "String"
+        elif func_type == FT_VAR:
+            node_type = "Global Variable"
+        elif func_type == FT_STO:
+            node_type = "Structure Offset"
+        elif func_type == FT_VTB:
+            node_type = "Vftable"
+            
+        if node_type in ["Callee", "Caller"]:
             if func_type == FT_LIB:
                 node_type += " (LIB)"
             elif func_type == FT_API:
                 node_type += " (API)"
             elif func_type == FT_MEM:
                 node_type += " (Indirect Call)"
-            elif func_type == FT_VTB:
-                node_type += " (Vftable)"
-        self.node_types[nid] = node_type
+            
+        if func_type in [FT_VTB, FT_STR, FT_VAR] and caller:
+            node_type += " (Ref)"            
+        return node_type
     
-    def _add_node(self, ea, text, color, start_ea=ida_idaapi.BADADDR, node_type="Unknown"):
-        if ea in self.eps and node_type in ["Callee"]:
+    def get_node_type_with_nid(self, nid, func_type=FT_UNK, caller=False):
+        node_type = self.get_node_type(func_type=func_type, caller=caller)
+            
+        if nid in self.node_ids and self.start_ea == self.node_ids[nid]:
+            node_type = "Primary Node"
+        elif nid in self.node_ids and self.node_ids[nid] in self.eps:
+            node_type = "Entry Point"
+            
+        return node_type
+    
+    def update_node_type(self, nid, func_type=FT_UNK, caller=False, node_type="Unknown"):
+        if node_type == "Unknown":
+            node_type = self.get_node_type_with_nid(nid, func_type=func_type, caller=caller)
+        self.node_types[nid] = (node_type, func_type, caller)
+    
+    def _add_node(self, ea, text, color, start_ea=ida_idaapi.BADADDR, caller=False):
+        if ea in self.eps and not caller:
             color = self.ep_color
         nid = self.AddNode((text, color))
         if self.config.debug:
@@ -3038,27 +3080,25 @@ _: print several important internal caches for debugging.
                 function = callee_stk.function
             
             self.dbg_print("inserted a node. ea: %x, nid:%d from %s:%d" % (ea, nid, function, lineno))
-        if node_type not in ["Unknown", "Callee", "Primary Node"] and ea in self.func_relations:
+        if caller:
             self.caller_nodes[ea] = nid
-            self.node_ids[nid] = ea
             self.caller_node_ids[nid] = ea
         else:
             self.nodes[ea] = nid
-            self.node_ids[nid] = ea
+        self.node_ids[nid] = ea
         self.update_related_nodes(ea, start_ea)
         return nid
         
-    def add_node(self, ea, text, color, start_ea=ida_idaapi.BADADDR, node_type="Unknown"):
+    def add_node(self, ea, text, color, start_ea=ida_idaapi.BADADDR, func_type=FT_UNK, caller=False, node_type="Unknown"):
         if text == self.exceeded_node_symbol:
             nid = self._add_exceeded_node(ea, text, color)
-            if node_type == "Unknown":
-                node_type = "Exceeded Node"
+            node_type = "Exceeded Node"
         else:
-            nid = self._add_node(ea, text, color, start_ea=start_ea, node_type=node_type)
-        self.update_node_type(nid, node_type)
+            nid = self._add_node(ea, text, color, start_ea=start_ea, caller=caller)
+        self.update_node_type(nid, func_type=func_type, caller=caller, node_type=node_type)
         return nid
 
-    def replace_node(self, nid, text, color, start_ea=ida_idaapi.BADADDR, dst_ea=ida_idaapi.BADADDR, node_type="Unknown"):
+    def replace_node(self, nid, text, color, start_ea=ida_idaapi.BADADDR, dst_ea=ida_idaapi.BADADDR, func_type=FT_UNK, caller=False, node_type="Unknown"):
         if self.config.debug:
             callee_stk = inspect.stack()[1]
             
@@ -3079,21 +3119,23 @@ _: print several important internal caches for debugging.
             pass
         else:
             ea = dst_ea
-        if node_type not in ["Unknown", "Callee", "Primary Node"] and ea in self.func_relations:
+        if caller:
             self.caller_nodes[ea] = nid
             self.caller_node_ids[nid] = ea
         else:
             self.nodes[ea] = nid
         self.node_ids[nid] = ea
         self.update_related_nodes(ea, start_ea)
-        self.update_node_type(nid, node_type)
+        self.update_node_type(nid, func_type=func_type, caller=caller, node_type=node_type)
         return ea
     
-    def get_node_id(self, ea, start_ea, node_type="Unknown"):
-        nid = self.nodes[ea]
-        if node_type not in ["Unknown", "Callee", "Primary Node"] and ea in self.func_relations:
+    def get_node_id(self, ea, start_ea, caller=False, update=True):
+        if caller:
             nid = self.caller_nodes[ea]
-        self.update_related_nodes(ea, start_ea)
+        elif ea in self.nodes:
+            nid = self.nodes[ea]
+        if update:
+            self.update_related_nodes(ea, start_ea)
         return nid
     
     def cut_string_node(self, str_contents, str_ea):
@@ -3104,6 +3146,50 @@ _: print several important internal caches for debugging.
             str_contents = str_contents[:self.maximum_string_length+taglen] + "..."
         return str_contents
     
+    def insert_string_node(self, ea, func_ea, psid, ref_ea=ida_idaapi.BADADDR):
+        if self.config.debug: self.dbg_print("Entering insert_string_node function for %x" % ea)
+        flags = ida_bytes.get_flags(ea)
+        if ida_bytes.is_strlit(flags):
+            # get string content by ea
+            self.dbg_print("%x is a strlit" % ea)
+            str_contents = cto_utils.get_str_content_by_ea(ea)
+            str_ea = ea
+            to_be_checked = ea
+            if str_contents is None and func_ea in self.func_relations:
+                # sometimes, get_str_content_by_ea is failed such as the string is too short, then try getting the string from func_relations.
+                for cea in self.func_relations[func_ea]["children"]:
+                    if cea in self.func_relations[func_ea]["children"]:
+                        gcea, ft, _, _str_contents = self.func_relations[func_ea]["children"][cea]
+                        to_be_checked = ea
+                        if ref_ea != ida_idaapi.BADADDR:
+                            to_be_checked = ref_ea
+                        if gcea == to_be_checked and ft == FT_STR:
+                            self.dbg_print("to be checked: %x" % to_be_checked, "gcea: %x" %gcea)
+                            str_ea = gcea
+                            str_contents = _str_contents
+            if str_contents is None:
+                return
+            
+            str_contents = self.cut_string_node(str_contents, str_ea)
+            # found the node that is already inserted
+            found_flag = False
+            for i, (txt, color) in enumerate(self._nodes):
+                if txt == str_contents:
+                    tmp_srcs = self.find_src_nodes_from_edges(i)
+                    if to_be_checked in [self.node_ids[x] for x in tmp_srcs if x in self.node_ids]:
+                        found_flag = True
+                        sid = i
+                        break
+            # for the first insertion
+            if not found_flag:
+                #sid = self.add_node(str_ea, str_contents, self.strings_color, func_type=FT_STR, caller=False)
+                sid = self.AddNode((str_contents, self.strings_color))
+                self.node_ids[sid] = str_ea
+                self.update_node_type(sid, func_type=FT_STR, node_type="String Content")
+            self.add_edge(psid, sid)
+        if self.config.debug: self.dbg_print("Finished insert_string_node function for %x" % ea)
+        
+    """
     def insert_string_node(self, ea):
         if self.config.debug: self.dbg_print("Entering insert_string_node function for %x" % ea)
         # adding strings nodes
@@ -3118,7 +3204,7 @@ _: print several important internal caches for debugging.
                             rsid = self.nodes[ref_str_ea]
                         else:
                             line = self.get_space_removed_disasm(ref_str_ea)
-                            rsid = self.add_node(ref_str_ea, line, self.strings_color, node_type="String Ref")
+                            rsid = self.add_node(ref_str_ea, line, self.strings_color, func_type=FT_STR, caller=True)
                         self.add_edge(self.nodes[ea], rsid)
                     else:
                         if ref_str_ea in self.caller_nodes:
@@ -3134,10 +3220,12 @@ _: print several important internal caches for debugging.
                         self.add_edge(rsid, sid)
                     else:
                         str_contents = self.cut_string_node(str_contents, str_ea)
-                        sid = self.add_node(str_ea, str_contents, self.strings_color, node_type="String")
+                        sid = self.add_node(str_ea, str_contents, self.strings_color, func_type=FT_STR, caller=False)
                         self.add_edge(rsid, sid)
         if self.config.debug: self.dbg_print("Finished insert_string_node function for %x" % ea)
+    """
         
+    """
     def insert_var_node(self, ea, func_type, node_type, node_color, loc_cache, show_flag, skip_content):
         if self.config.debug: self.dbg_print("Entering insert_var_node function for %x" % ea)
         # adding strings nodes
@@ -3152,7 +3240,7 @@ _: print several important internal caches for debugging.
                             rsid = self.nodes[ref_str_ea]
                         else:
                             line = self.get_space_removed_disasm(ref_str_ea)
-                            rsid = self.add_node(ref_str_ea, line, node_color, node_type=node_type + "Ref")
+                            rsid = self.add_node(ref_str_ea, line, node_color, func_type=func_type, caller=True)
                         self.add_edge(self.nodes[ea], rsid)
                     else:
                         rsid = self.nodes[ea]
@@ -3170,20 +3258,21 @@ _: print several important internal caches for debugging.
                             if var_name:
                                 str_contents = var_name + " (" + str_contents + ")"
                             loc_cache[str_ea] = str_contents
-                            sid = self.add_node(str_ea, str_contents, node_color, node_type=node_type)
+                            sid = self.add_node(str_ea, str_contents, node_color, func_type=func_type, caller=False)
                             self.add_edge(rsid, sid)
         if self.config.debug: self.dbg_print("Finished insert_var_node function for %x" % ea)
+    """
     
     def insert_comment_node(self, ea):
         if self.config.debug: self.dbg_print("Entering insert_comment_node function for %x" % ea)
         # adding comment nodes
         #if self.config.show_comment_nodes and ea in self.nodes and ea not in self.filtered_nodes:
-        if self.config.show_comment_nodes and ea in self.nodes:
+        if self.config.show_comment_nodes and ea in self.nodes and ea in self.func_relations:
             for node_type in self.func_relations[ea]:
                 if node_type in ["cmt", "rcmt"]:
                     cmt_type = node_type
                     for cmt_ea in self.func_relations[ea][cmt_type]:
-                        if cmt_ea not in self.nodes:
+                        if cmt_ea not in self.nodes and cmt_ea not in self.caller_nodes:
                             line = self.get_space_removed_disasm(cmt_ea, False)
                             taglen = ida_lines.tag_strlen(line)
                             if (len(line) - taglen) > self.maximum_comment_length+3:
@@ -3192,14 +3281,15 @@ _: print several important internal caches for debugging.
                                 node_type = 'Comment'
                             else:
                                 node_type = 'Repeatable Comment'
-                            nid = self.add_node(cmt_ea, line, self.comments_color, node_type=node_type)
+                            nid = self.add_node(cmt_ea, line, self.comments_color, node_type=node_type, caller=True)
                             self.add_edge(self.nodes[ea], nid)
         if self.config.debug: self.dbg_print("Finished insert_comment_node function for %x" % ea)
 
     def trace_paths_append_cache(self, start_ea, end_ea, fn_keys, cache, max_recursive=g_max_recursive, direction="parents", result=None):
         found_flag = False
         self.dbg_print("trace the call tree", hex(start_ea).rstrip("L"), hex(end_ea).rstrip("L"), direction, max_recursive, [hex(x).rstrip("L") for x in fn_keys], self.skip_api, self.skip_lib)
-        for r in get_func_relation.trace_func_calls(self.func_relations, ea=start_ea, target_ea=end_ea, direction=direction, max_recursive=max_recursive, filtered_nodes=self.filtered_nodes, skip_api=self.skip_api, skip_lib=self.skip_lib, debug=self.config.debug, dbg_print_func=self.dbg_print, result=result):
+        for r in get_func_relation.trace_func_calls(self.func_relations, ea=start_ea, target_ea=end_ea, direction=direction, vtbl_refs=self.vtbl_refs, max_recursive=max_recursive, filtered_nodes=self.filtered_nodes, skip_api=self.skip_api, skip_lib=self.skip_lib, debug=self.config.debug, dbg_print_func=self.dbg_print, result=result):
+        #for r in get_func_relation.trace_nodes(self.func_relations, start_ea=start_ea, target_ea=end_ea, direction=direction, vtbl_refs=self.vtbl_refs, max_recursive=max_recursive, filtered_nodes=self.filtered_nodes, skip_api=self.skip_api, skip_lib=self.skip_lib, debug=self.config.debug, dbg_print_func=self.dbg_print, result=result):
             yield r
             found_flag = True
             if (start_ea, end_ea, direction, max_recursive, fn_keys, self.skip_api, self.skip_lib) in cache:
@@ -3220,34 +3310,18 @@ _: print several important internal caches for debugging.
             for p in cache[(start_ea, end_ea, direction, max_recursive, fn_keys, self.skip_api, self.skip_lib)]:
                 yield p
         else:
-            if start_ea in self.func_relations:
-                for r in self.trace_paths_append_cache(start_ea, end_ea, fn_keys, cache, max_recursive=max_recursive, direction=direction):
-                    yield r
-            elif start_ea in self.vtbl_refs:
-                yield [(start_ea, self.vtbl_refs[start_ea], FT_VTB)]
-            else:
-                for ea, func_ea, dref_off_ea in get_func_relation.get_dref_belong_to_func(start_ea):
-                    if self.config.debug: self.dbg_print("ea:", hex(ea).rstrip("L"), "func_ea:", hex(func_ea).rstrip("L"), "dref_off_ea:", hex(dref_off_ea).rstrip("L"))
-                    func_type = FT_UNK
-                    if func_ea == ida_idaapi.BADADDR:
-                        if direction == "parents":
-                            yield [(ea, func_ea, func_type)]
-                    elif ea in self.func_relations[func_ea]["children"]:
-                        func_type = self.func_relations[func_ea]["children"][ea]
-                    elif ea in self.func_relations[func_ea]["strings"]:
-                        func_type = FT_STR
-                    elif ea in self.func_relations[func_ea]["gvars"]:
-                        func_type = FT_VAR
-                    if func_type != FT_UNK:
-                        if direction == "parents":
-                            result = [(ea, func_ea, func_type)]
-                            for r in self.trace_paths_append_cache(func_ea, end_ea, fn_keys, cache, max_recursive=max_recursive, direction=direction, result=result):
-                                yield r
-                                
-    def insert_dref_node_info(self, start_ea):
+            for r in self.trace_paths_append_cache(start_ea, end_ea, fn_keys, cache, max_recursive=max_recursive, direction=direction):
+                yield r
+                
+    """
+    def insert_dref_node_info(self, start_ea, direction):
         if start_ea in self.func_relations:
             return
-        for dref_ea, dref_func_ea, dref_off_ea in get_func_relation.get_dref_belong_to_func(start_ea):
+        if direction == "parents":
+            drefs = get_func_relation.get_dref_belong_to_func(start_ea, self.vtbl_refs)
+        else:
+            drefs = get_func_relation.get_dref_from_belong_to_func(start_ea)
+        for dref_ea, dref_func_ea, dref_off_ea in drefs:
             func_type = FT_VAR
             if dref_func_ea in self.func_relations and dref_ea in self.func_relations[dref_func_ea]["strings"]:
                 str_ea, _, _, str_contents = self.func_relations[dref_func_ea]["strings"][dref_ea]
@@ -3259,7 +3333,52 @@ _: print several important internal caches for debugging.
                 if var_name:
                     gvar_contents = var_name + " (" + gvar_contents + ")"
                 self.gvars_contents[start_ea] = gvar_contents
+    """
                 
+    def is_path_displayable(self, r):
+        if len(r) == 0:
+            return True
+        
+        caller, callee, func_type = r[-1]
+        depth = self.max_depth
+        if caller == ida_idaapi.BADADDR:
+            caller, callee, func_type = r[-2]
+            depth += 1
+            
+        flag = False
+        if func_type == FT_MEM and not self.config.show_indirect_calls:
+            if self.config.debug: self.dbg_print("node_type: FT_MEM and show_indirect_calls is disabled.")
+            return False
+        elif func_type == FT_STR and not self.config.show_strings_nodes:
+            if self.config.debug: self.dbg_print("node_type: FT_STR and show_strings_nodes is disabled.")
+            return False
+        elif func_type == FT_VAR and not self.config.show_gvars_nodes:
+            if self.config.debug: self.dbg_print("node_type: FT_VAR and show_gvars_nodes is disabled.")
+            return False
+        elif func_type == FT_STO and not self.config.show_stroff_nodes:
+            if self.config.debug: self.dbg_print("node_type: FT_STO and show_stroff_nodes is disabled.")
+            return False
+        return True
+    
+    def dref_data_type(self, dref_ea, dref_func_ea, dref_off_ea):
+        if self.config.debug: self.dbg_print(hex(dref_ea), hex(dref_func_ea), hex(dref_off_ea))
+        dref_flag = False
+        func_type = FT_VAR
+        if dref_off_ea != ida_idaapi.BADADDR:
+            if dref_ea in self.func_relations[dref_func_ea]["strings"]:
+                func_type = FT_STR
+                dref_flag = True
+            elif dref_ea in self.func_relations[dref_func_ea]["gvars"]:
+                dref_flag = True
+        else:
+            vflags = ida_bytes.get_full_flags(dref_ea)
+            if ida_bytes.is_strlit(vflags):
+                func_type = FT_STR
+                dref_flag = True
+            else:
+                dref_flag = True
+        return dref_flag, func_type
+    
     def draw_parents_call_tree(self, start_ea, end_ea, max_recursive=g_max_recursive):
         if start_ea not in self.related_nodes:
             self.related_nodes[start_ea] = set([start_ea])
@@ -3269,26 +3388,32 @@ _: print several important internal caches for debugging.
             self.dbg_print("##################### Start processing %x #################" % start_ea)
             
         # push a starter node
-        self.insert_dref_node_info(start_ea)
+        #self.insert_dref_node_info(start_ea, direction="parents")
+        dref_flag = False
+        func_type = FT_UNK
         if start_ea not in self.nodes:
             # for functions
             if start_ea in self.func_relations:
-                func_name = self.get_callee_name(start_ea, self.func_relations[start_ea]["func_type"])
+                func_type = self.func_relations[start_ea]["func_type"]
+                func_name = self.get_callee_name(start_ea, func_type)
             # for strings and global variables
             else:
                 func_type = FT_VAR
-                for dref_ea, dref_func_ea, dref_off_ea in get_func_relation.get_dref_belong_to_func(start_ea):
-                    func_type = FT_VAR
-                    if dref_ea in self.func_relations[dref_func_ea]["strings"]:
-                        func_type = FT_STR
-                        break
-                    elif dref_ea in self.func_relations[dref_func_ea]["gvars"]:
+                for dref_ea, dref_func_ea, dref_off_ea in get_func_relation.get_dref_belong_to_func(start_ea, self.vtbl_refs):
+                    dref_flag, func_type = self.dref_data_type(dref_ea, dref_func_ea, dref_off_ea)
+                    if dref_flag:
                         break
                 func_name = self.get_callee_name(start_ea, func_type)
                     
-            nid = self.add_node(start_ea, func_name, self.start_color, start_ea, node_type="Callee")
+            nid = self.add_node(start_ea, func_name, self.start_color, start_ea, func_type=func_type, caller=False)
         else:
-            nid = self.get_node_id(start_ea, start_ea)
+            nid = self.get_node_id(start_ea, start_ea, caller=False)
+            if start_ea not in self.func_relations:
+                func_type = FT_VAR
+                for dref_ea, dref_func_ea, dref_off_ea in get_func_relation.get_dref_belong_to_func(start_ea, self.vtbl_refs):
+                    dref_flag, func_type = self.dref_data_type(dref_ea, dref_func_ea, dref_off_ea)
+                    if dref_flag:
+                        break
         
         if self.config.debug: self.dbg_print("before tracing... start_ea: %x, end_ea: %x, max_recursive: %d" % (start_ea, end_ea, max_recursive))
         for r in self.trace_paths_with_cache(start_ea, end_ea, max_recursive=max_recursive, direction="parents"):
@@ -3299,6 +3424,10 @@ _: print several important internal caches for debugging.
                 ida_kernwin.msg("The number of max_nodes is exceeded (%d < %d). Note that this graph result is incompleted.%s" % (self.max_nodes, len(self._nodes)+len(r), os.linesep))
                 ida_kernwin.msg("Change the graph type and dig into it manually.%s" % (os.linesep))
                 break
+            
+            # skip the path if the last node is not a node displayed by config
+            if not dref_flag and not self.is_path_displayable(r):
+                continue
             
             # to skip nodes in a result if a filtered node is included, check a result first.
             idx = -1
@@ -3317,6 +3446,7 @@ _: print several important internal caches for debugging.
             # for other nodes except for start nodes
             prev_id = None
             next_callee = None
+            next_callee_func_type = FT_UNK
             next_caller = None
             prev_caller = None
             # note that r and its item indice are reversed for parent nodes.
@@ -3332,10 +3462,12 @@ _: print several important internal caches for debugging.
                 if i > 0:
                     next_callee = r[i-1][1]
                     next_caller = r[i-1][0]
+                    next_callee_func_type = r[i-1][2]
                 # i == 0 for start_ea ( the bottom item of the parents node)
                 else:
                     next_callee = start_ea
                     next_caller = None
+                    next_callee_func_type = func_type
                     
                 # skip nodes until a filtered node appears
                 if last_hit >= 0 and last_hit < i:
@@ -3344,7 +3476,7 @@ _: print several important internal caches for debugging.
                     continue
                 elif last_hit >= 0 and last_hit >= i:
                     # if the path is already existent, just stop it.
-                    if not self.config.skip_caller and caller in self.filtered_nodes and ((caller in self.nodes and callee != caller) or caller in self.caller_nodes):
+                    if not self.config.skip_caller and caller in self.filtered_nodes and caller in self.caller_nodes:
                         if self.config.debug:
                             self.dbg_print("Skipping inserting process (%d/%d) last_hit: %d, i: %d" % (len(r)-i, len(r), last_hit, i))
                         continue
@@ -3352,9 +3484,12 @@ _: print several important internal caches for debugging.
                         if self.config.debug:
                             self.dbg_print("Skipping inserting process (%d/%d) last_hit: %d, i: %d" % (len(r)-i, len(r), last_hit, i))
                         continue
-
-                if self.config.debug:
-                    self.dbg_print("processing %d/%d for a set of callee/caller (%x/%x) with reverse order" % (len(r)-i, len(r), callee, caller))
+                # if the current pair is for an exceeded node and its beyond nodes are not related to code and show_gvars_nodes is disabled, skip inserting exceeded node
+                elif caller == ida_idaapi.BADADDR and callee_func_type == FT_VAR and not self.config.show_gvars_nodes:
+                    if self.config.debug:
+                        self.dbg_print("Skipping inserting process (%d/%d) last_hit: %d, i: %d" % (len(r)-i, len(r), last_hit, i))
+                    continue
+                    
                 do_it_flag = False
                 ##########################
                 #
@@ -3370,9 +3505,9 @@ _: print several important internal caches for debugging.
                         if self.config.debug:
                             self.dbg_print("callee (%x) is in nodes" % callee)
                         if not self.config.skip_caller:
-                            callee_id = self.get_node_id(callee, start_ea)
+                            callee_id = self.get_node_id(callee, start_ea, caller=False)
                         else:
-                            callee_id = self.get_node_id(callee, start_ea)
+                            callee_id = self.get_node_id(callee, start_ea, caller=False)
                             if prev_id is not None and prev_caller != callee:
                                 self.add_edge(prev_id, callee_id)
                             else:
@@ -3391,12 +3526,12 @@ _: print several important internal caches for debugging.
                         if callee in self.nodes:
                             if self.config.debug:
                                 self.dbg_print("callee (%x) is in nodes" % callee)
-                            callee_id = self.get_node_id(callee, start_ea)
+                            callee_id = self.get_node_id(callee, start_ea, caller=False)
                         elif next_callee in self.exceeded_nodes:
                             if self.config.debug:
                                 self.dbg_print("next_callee (%x) is in exceeded nodes" % next_callee)
                             callee_id = self.exceeded_nodes[next_callee]
-                            nea = self.replace_node(callee_id, line, color, start_ea, callee, node_type="Callee")
+                            nea = self.replace_node(callee_id, line, color, start_ea, callee, func_type=callee_func_type, caller=False)
                         
                         # find a set of callee and caller but they are not connected yet because the max path limitation is exceeded.
                         elif callee in self.func_relations and len(self.func_relations[callee]['children']) >= 1:
@@ -3446,7 +3581,7 @@ _: print several important internal caches for debugging.
                                 if tmp_ea in self.exceeded_nodes:
                                     if self.config.debug:
                                         self.dbg_print("tmp_ea (%x) is in exceeded_nodes" % tmp_ea)
-                                    src_ea = self.replace_node(callee_id, line, color, start_ea, callee, node_type="Callee")
+                                    src_ea = self.replace_node(callee_id, line, color, start_ea, callee, func_type=callee_func_type, caller=False)
                                 else:
                                     if self.config.debug:
                                         self.dbg_print("tmp_ea (%x) is not in exceeded_nodes" % tmp_ea)
@@ -3454,12 +3589,12 @@ _: print several important internal caches for debugging.
                             else:
                                 if self.config.debug:
                                     self.dbg_print("Adding a node for callee (%x)" % callee)
-                                callee_id = self.add_node(callee, line, color, start_ea, node_type="Callee")
+                                callee_id = self.add_node(callee, line, color, start_ea, func_type=callee_func_type, caller=False)
                         # create a new node for a new function
                         else:
                             if self.config.debug:
                                 self.dbg_print("callee (%x) is not displayed yet. Adding the node." % callee)
-                            callee_id = self.add_node(callee, line, color, start_ea, node_type="Callee")
+                            callee_id = self.add_node(callee, line, color, start_ea, func_type=callee_func_type, caller=False)
                         
                     #####################
                     #
@@ -3470,7 +3605,7 @@ _: print several important internal caches for debugging.
                             self.dbg_print("Adding a callee node (%x)." % callee)
                         func_name = self.get_callee_name(callee, callee_func_type)
                         color = self.get_color(callee_func_type, callee)
-                        callee_id = self.add_node(callee, func_name, color, start_ea, node_type="Callee")
+                        callee_id = self.add_node(callee, func_name, color, start_ea, func_type=callee_func_type, caller=False)
 
                     if prev_id is not None:
                         self.add_edge(prev_id, callee_id)
@@ -3490,7 +3625,7 @@ _: print several important internal caches for debugging.
                         if next_callee in self.nodes:
                             if self.config.debug:
                                 self.dbg_print("next_callee (%x) is in nodes " % next_callee)
-                            next_callee_id = self.get_node_id(next_callee, start_ea)
+                            next_callee_id = self.get_node_id(next_callee, start_ea, caller=False)
                             src = self.find_src_node_from_edges(next_callee_id)
                             if src < 0:
                                 if self.config.debug:
@@ -3509,7 +3644,7 @@ _: print several important internal caches for debugging.
                             insert_flag = True
 
                         # find a set of callee and caller but they are not connected yet because the max path limitation is exceeded.
-                        if insert_flag and next_callee in self.func_relations and len(self.func_relations[next_callee]['parents']) == 1:
+                        if insert_flag and next_callee in self.func_relations and len(self.func_relations[next_callee]['parents']) >= 1:
                             if self.config.debug:
                                 self.dbg_print("next_callee (%x) is in func_relations" % next_callee)
                             src = -1
@@ -3536,8 +3671,12 @@ _: print several important internal caches for debugging.
                                                 if self.config.debug:
                                                     self.dbg_print("next_callee (%x) is one of the additional trace points" % next_callee)
                                                 pass
+                                            #elif tmp_ea in self.nodes and next_callee not in self.nodes:
+                                            #    self.dbg_print("a src node (tmp_ea) (%x) is already inserted." % tmp_ea)
+                                            #    insert_flag = False
                                             else:
-                                                src = -1
+                                                insert_flag = False
+                                                #src = -1
                                                 if self.config.debug:
                                                     self.dbg_print("next_callee (%x) is not displayed yet." % next_callee)
                                             break
@@ -3547,8 +3686,9 @@ _: print several important internal caches for debugging.
                                             self.dbg_print("next_callee (%x) is a child of tmp_ea (%x)" % (next_callee, tmp_ea))
                                         if next_callee in self.nodes and tmp_ea in self.exceeded_nodes:
                                             src = self.exceeded_nodes[tmp_ea]
+                                            src_ea = self.replace_node(src, line, color, start_ea, next_callee, func_type=next_callee_func_type, caller=False)
                                             if self.config.debug:
-                                                self.dbg_print("next_callee (%x) is already displayed." % next_callee)
+                                                self.dbg_print("next_callee (%x) is an exceeded node and it's already displayed. it was replaced with next_callee." % next_callee)
                                             self.add_edge(src, callee_id)
                                         elif next_callee in self.additional_trace_points:
                                             insert_flag = False
@@ -3561,10 +3701,11 @@ _: print several important internal caches for debugging.
                                                 self.dbg_print("next_callee (%x) is not displayed yet" % next_callee)
                                         break
                             if src >= 0:
-                                callee_id = self.get_node_id(src, start_ea)
+                                callee_id = src
+                                self.update_related_nodes(self.node_ids[callee_id], start_ea)
                                 insert_flag = False
                                 if self.config.debug:
-                                    self.dbg_print("src (%x) is already displayed" % self.node_ids[src])
+                                    self.dbg_print("callee (%x) has a source" % self.node_ids[callee_id])
                             elif not insert_flag:
                                 callee_id = None
                                 pass
@@ -3572,7 +3713,7 @@ _: print several important internal caches for debugging.
                                 insert_flag = True
                         
                         if insert_flag:
-                            callee_id = self.add_node(next_callee, self.exceeded_node_symbol, self.default_color, node_type="Exceeded Node")
+                            callee_id = self.add_node(next_callee, self.exceeded_node_symbol, self.default_color)
                     if self.config.debug:
                         self.dbg_print("updating prev_id, was: ", prev_id, "now: ", callee_id)
                     prev_id = callee_id
@@ -3597,19 +3738,19 @@ _: print several important internal caches for debugging.
                             self.dbg_print("exceeded_nodes:", [hex(x).rstrip("L") for x in self.exceeded_nodes])
                         callee_id = -1
                         if callee in self.nodes:
-                            callee_id = self.get_node_id(callee, start_ea)
+                            callee_id = self.get_node_id(callee, start_ea, caller=False)
                         if callee_id >= 0:
                             src = self.find_src_node_from_edges(callee_id, self.exceeded_node_symbol)
                             if src < 0:
                                 if self.config.debug:
                                     self.dbg_print("callee (%x) does not have an exceeded node. Inserting it." % callee)
-                                nid = self.add_node(callee, self.exceeded_node_symbol, self.default_color, node_type="Exceeded Node")
+                                nid = self.add_node(callee, self.exceeded_node_symbol, self.default_color)
                                 self.add_edge(nid, callee_id)
                     # skip underneath nodes of library functions for simple layout
                     elif (self.skip_api and callee_func_type in [FT_API]) or (self.skip_lib and callee_func_type in [FT_LIB]):
                         callee_id = -1
                         if callee in self.nodes:
-                            callee_id = self.get_node_id(callee, start_ea)
+                            callee_id = self.get_node_id(callee, start_ea, caller=False)
                         elif callee in self.exceeded_nodes:
                             callee_id = self.exceeded_nodes[callee]
                         src = -1
@@ -3620,7 +3761,7 @@ _: print several important internal caches for debugging.
                             if callee_id >= 0 and prev_caller is not None:
                                 # if there are no nodes under the node yet and there
                                 # is a next node, insert an exceeded node.
-                                callee_id = self.add_node(callee, self.exceeded_node_symbol, self.default_color, node_type="Exceeded Node")
+                                callee_id = self.add_node(callee, self.exceeded_node_symbol, self.default_color)
                                 self.add_edge(callee_id, prev_id)
                             else:
                                 # no more nodes on the result. Nothing to do. Continue processing...
@@ -3646,7 +3787,7 @@ _: print several important internal caches for debugging.
                 
                 #################################
                 #
-                # for caller functions
+                # for caller nodes
                 #
                 if self.config.debug:
                     self.dbg_print("------------- processing the caller (%x)" % caller)
@@ -3656,34 +3797,34 @@ _: print several important internal caches for debugging.
                         if next_callee in self.exceeded_nodes:
                             caller_id = self.exceeded_nodes[next_callee]
                         else:
+                            str_next_caller = "None"
                             if self.config.debug:
-                                self.dbg_print("next_callee:", hex(next_callee).rstrip("L"), "filtered_nodes (keys):", str([hex(x).rstrip("L") for x in self.filtered_nodes]), "next_caller:", hex(next_caller).rstrip("L"), "filtered_nodes (values):", str([hex(x).rstrip("L") for x in self.filtered_nodes]))
+                                if next_caller is not None:
+                                    str_next_caller = hex(next_caller).rstrip("L")
+                                self.dbg_print("next_callee:", hex(next_callee).rstrip("L"), "filtered_nodes (keys):", str([hex(x).rstrip("L") for x in self.filtered_nodes]), "next_caller:", str_next_caller, "filtered_nodes (values):", str([hex(x).rstrip("L") for x in self.filtered_nodes]))
                             if next_callee in self.nodes:
                                 next_callee_id = self.nodes[next_callee]
                                 src = self.find_src_node_from_edges(next_callee_id)
-                                if src < 0 and next_callee not in self.additional_trace_points:
-                                    caller_id = self.add_node(next_callee, self.exceeded_node_symbol, self.default_color, node_type="Exceeded Node")
+                                self.dbg_print("src:", src)
+                                if src < 0:
+                                    if next_callee not in self.additional_trace_points:
+                                        caller_id = self.add_node(next_callee, self.exceeded_node_symbol, self.default_color)
+                                    else:
+                                        caller_id = None
                                 else:
-                                    caller_id = self.get_node_id(self.node_ids[src], start_ea)
+                                    caller_id = self.get_node_id(self.node_ids[src], start_ea, caller=True)
                             elif next_callee in self.filtered_nodes or next_caller in self.filtered_nodes:
                                 caller_id = None
+                            elif start_ea in self.trace_points_relations and "parents" in self.trace_points_relations[start_ea] and next_callee in self.trace_points_relations[start_ea]["parents"]:
+                                caller_id = None
                             else:
-                                caller_id = self.add_node(next_callee, self.exceeded_node_symbol, self.default_color, node_type="Exceeded Node")
+                                caller_id = self.add_node(next_callee, self.exceeded_node_symbol, self.default_color)
                     
                     # for existing nodes (general nodes)
-                    elif (callee != caller and caller in self.nodes) or caller in self.caller_nodes:
+                    elif caller in self.caller_nodes:
                         if prev_id is not None and prev_caller != caller:
-                            caller_id = self.get_node_id(caller, start_ea, "Caller")
+                            caller_id = self.get_node_id(caller, start_ea, caller=True)
                             self.add_edge(prev_id, caller_id)
-                            """
-                            # avoid thunk 
-                            if callee == caller and callee in self.func_relations and callee not in self.func_relations[callee]["parents"] and callee in self.func_relations[callee]["children"] and callee != self.func_relations[callee]["children"][callee][0]:
-                                caller_id = self.get_node_id(caller, start_ea)
-                                pass
-                            else:
-                                caller_id = self.get_node_id(caller, start_ea)
-                                self.add_edge(prev_id, caller_id)
-                            """
                         else:
                             pass
                     
@@ -3710,12 +3851,12 @@ _: print several important internal caches for debugging.
                         # if a callee has a "..." node, replace it with actual a function pointer.
                         if src >= 0:
                             caller_id = src
-                            src_ea = self.replace_node(src, line, color, start_ea, caller, node_type="Caller")
+                            src_ea = self.replace_node(src, line, color, start_ea, caller, func_type=callee_func_type, caller=True)
                             if self.config.debug:
                                 self.dbg_print("replace an exceeded_node with the caller (%x %d)" % (src_ea, caller_id))
                         # create a new node for a new function
                         else:
-                            caller_id = self.add_node(caller, line, color, start_ea, node_type="Caller")
+                            caller_id = self.add_node(caller, line, color, start_ea, func_type=callee_func_type, caller=True)
                         
                         if prev_id is not None and caller not in self.filtered_nodes:
                             self.add_edge(prev_id, caller_id)
@@ -3734,18 +3875,18 @@ _: print several important internal caches for debugging.
                     if last_hit >= i and caller in self.filtered_nodes and prev_id is not None:
                         src = self.find_src_node_from_edges(prev_id, self.exceeded_node_symbol)
                         if src < 0:
-                            nid = self.add_node(caller, self.exceeded_node_symbol, self.default_color, node_type="Exceeded Node")
+                            nid = self.add_node(caller, self.exceeded_node_symbol, self.default_color)
                             self.add_edge(nid, prev_id)
                     
                 if callee != ida_idaapi.BADADDR and callee in self.func_relations:
                     # adding strings nodes
-                    self.insert_string_node(callee)
+                    #self.insert_string_node(callee)
                     
                     # adding global/static variable nodes
-                    self.insert_var_node(callee, func_type="gvars", node_type="Global/Static Vars Ref", node_color=self.gvars_color, loc_cache=self.gvars_contents, show_flag=self.config.show_gvars_nodes, skip_content=False)
+                    #self.insert_var_node(callee, func_type="gvars", node_type="Global/Static Vars Ref", node_color=self.gvars_color, loc_cache=self.gvars_contents, show_flag=self.config.show_gvars_nodes, skip_content=False)
                     
                     # adding structure member access nodes
-                    self.insert_var_node(callee, func_type="struct_offsets", node_type="Struct Members", node_color=self.stroff_color, loc_cache=self.stroff_contents, show_flag=self.config.show_stroff_nodes, skip_content=True)
+                    #self.insert_var_node(callee, func_type="struct_offsets", node_type="Struct Members", node_color=self.stroff_color, loc_cache=self.stroff_contents, show_flag=self.config.show_stroff_nodes, skip_content=True)
                     
                     # adding comments nodes
                     self.insert_comment_node(callee)
@@ -3758,24 +3899,25 @@ _: print several important internal caches for debugging.
                     
             # for start node
             if start_ea in self.nodes:
-                nid = self.get_node_id(start_ea, start_ea)
+                nid = self.get_node_id(start_ea, start_ea, caller=False)
                 if nid == self.nodes[self.start_ea] and self._nodes[nid][1] != self.start_color:
                     self._nodes[nid] = (self._nodes[nid][0], self.start_color)
             else:
-                func_name = self.get_callee_name(start_ea, self.func_relations[start_ea]["func_type"])
-                nid = self.add_node(start_ea, func_name, self.start_color, start_ea, node_type="Callee")
+                func_type = self.func_relations[start_ea]["func_type"]
+                func_name = self.get_callee_name(start_ea, func_type)
+                nid = self.add_node(start_ea, func_name, self.start_color, start_ea, func_type=func_type, caller=False)
             
             if prev_id is not None:
                 self.add_edge(prev_id, nid)
         
         # adding strings nodes
-        self.insert_string_node(start_ea)
+        #self.insert_string_node(start_ea)
         
         # adding global/static variable nodes
-        self.insert_var_node(start_ea, func_type="gvars", node_type="Global/Static Vars Ref", node_color=self.gvars_color, loc_cache=self.gvars_contents, show_flag=self.config.show_gvars_nodes, skip_content=False)
+        #self.insert_var_node(start_ea, func_type="gvars", node_type="Global/Static Vars Ref", node_color=self.gvars_color, loc_cache=self.gvars_contents, show_flag=self.config.show_gvars_nodes, skip_content=False)
         
         # adding structure member access nodes
-        self.insert_var_node(start_ea, func_type="struct_offsets", node_type="Struct Members", node_color=self.stroff_color, loc_cache=self.stroff_contents, show_flag=self.config.show_stroff_nodes, skip_content=True)
+        #self.insert_var_node(start_ea, func_type="struct_offsets", node_type="Struct Members", node_color=self.stroff_color, loc_cache=self.stroff_contents, show_flag=self.config.show_stroff_nodes, skip_content=True)
         
         # adding comments nodes
         self.insert_comment_node(start_ea)
@@ -3787,36 +3929,43 @@ _: print several important internal caches for debugging.
             self.related_nodes[start_ea] = set([start_ea])
             
         # push a starter node
-        self.insert_dref_node_info(start_ea)
+        #self.insert_dref_node_info(start_ea, direction="children")
+        dref_flag = False
+        func_type = FT_UNK
         if start_ea not in self.nodes:
             # for functions
             if start_ea in self.func_relations:
-                func_name = self.get_callee_name(start_ea, self.func_relations[start_ea]["func_type"])
+                func_type = self.func_relations[start_ea]["func_type"]
+                func_name = self.get_callee_name(start_ea, func_type)
             # for strings and global variables
             else:
                 func_type = FT_VAR
-                for dref_ea, dref_func_ea, dref_off_ea in get_func_relation.get_dref_belong_to_func(start_ea):
-                    func_type = FT_VAR
-                    if dref_ea in self.func_relations[dref_func_ea]["strings"]:
-                        func_type = FT_STR
-                        break
-                    elif dref_ea in self.func_relations[dref_func_ea]["gvars"]:
+                for dref_ea, dref_func_ea, dref_off_ea in get_func_relation.get_dref_from_belong_to_func(start_ea):
+                    dref_flag, func_type = self.dref_data_type(dref_ea, dref_func_ea, dref_off_ea)
+                    if dref_flag:
                         break
                 func_name = self.get_callee_name(start_ea, func_type)
-            nid = self.add_node(start_ea, func_name, self.start_color, start_ea, node_type="Callee")
+            nid = self.add_node(start_ea, func_name, self.start_color, start_ea, func_type=func_type, caller=False)
             if nid == self.nodes[self.start_ea] and self._nodes[nid][1] != self.start_color:
                 self._nodes[nid] = (self._nodes[nid][0], self.start_color)
         else:
-            nid = self.get_node_id(start_ea, start_ea)
+            nid = self.get_node_id(start_ea, start_ea, caller=False)
+            if start_ea not in self.func_relations:
+                func_type = FT_VAR
+                for dref_ea, dref_func_ea, dref_off_ea in get_func_relation.get_dref_from_belong_to_func(start_ea):
+                    dref_flag, func_type = self.dref_data_type(dref_ea, dref_func_ea, dref_off_ea)
+                    if dref_flag:
+                        break
         
         # adding strings nodes
-        self.insert_string_node(start_ea)
+        #self.insert_string_node(start_ea)
+        self.insert_string_node(start_ea, start_ea, nid)
         
         # adding global/static variable nodes
-        self.insert_var_node(start_ea, func_type="gvars", node_type="Global/Static Vars Ref", node_color=self.gvars_color, loc_cache=self.gvars_contents, show_flag=self.config.show_gvars_nodes, skip_content=False)
+        #self.insert_var_node(start_ea, func_type="gvars", node_type="Global/Static Vars Ref", node_color=self.gvars_color, loc_cache=self.gvars_contents, show_flag=self.config.show_gvars_nodes, skip_content=False)
         
         # adding structure member access nodes
-        self.insert_var_node(start_ea, func_type="struct_offsets", node_type="Struct Members", node_color=self.stroff_color, loc_cache=self.stroff_contents, show_flag=self.config.show_stroff_nodes, skip_content=True)
+        #self.insert_var_node(start_ea, func_type="struct_offsets", node_type="Struct Members", node_color=self.stroff_color, loc_cache=self.stroff_contents, show_flag=self.config.show_stroff_nodes, skip_content=True)
         
         # adding comments nodes
         self.insert_comment_node(start_ea)
@@ -3832,6 +3981,10 @@ _: print several important internal caches for debugging.
                 ida_kernwin.msg("Change the graph type and dig into it manually.%s" % (os.linesep))
                 break
                 
+            # skip the path if the last node is not a node displayed by config
+            if not dref_flag and not self.is_path_displayable(r):
+                continue
+            
             # to skip nodes in a result if a filtered node is included, check a result first.
             last_hit = -1
             idx = -1
@@ -3847,17 +4000,20 @@ _: print several important internal caches for debugging.
             if not tmp_flag:
                 first_hit = -1
             
-            prev_id = self.nodes[start_ea]
+            prev_id = self.get_node_id(start_ea, start_ea, caller=False, update=False)
             prev_callee = None
+            prev_callee_func_type = FT_UNK
             next_caller = None
             for i, (caller, callee, callee_func_type) in enumerate(r):
                 if self.config.debug:
                     self.dbg_print("i:", i, "first_hit:", first_hit, "caller:", hex(caller).rstrip("L"), "callee:", hex(callee).rstrip("L"))
                 if i > 0:
                     prev_callee = r[i-1][1]
+                    prev_callee_func_type = r[i-1][2]
                 # i == 0 for start_ea as the top item of the child nodes
                 else:
                     prev_callee = start_ea
+                    prev_callee_func_type = func_type
                 if (len(r) - 1) > i:
                     next_caller = r[i+1][0]
                     if self.config.skip_caller:
@@ -3879,11 +4035,13 @@ _: print several important internal caches for debugging.
                     if self.config.debug:
                         self.dbg_print("Skipping inserting process (%d/%d) first_hit: %d, i: %d" % (i+1, len(r), first_hit, i))
                     # if the path is already existent, just stop it.
-                    #if not self.config.skip_caller and caller in self.filtered_nodes and caller in self.nodes:
-                    if not self.config.skip_caller and caller in self.filtered_nodes and ((caller in self.nodes and caller != prev_callee) or caller in self.caller_nodes):
+                    if not self.config.skip_caller and caller in self.filtered_nodes and caller in self.caller_nodes:
                         break
                     elif self.config.skip_caller and callee in self.filtered_nodes and callee in self.nodes:
                         break
+                # if the current pair is for an exceeded node and its beyond nodes are not related to code and show_gvars_nodes is disabled, skip inserting exceeded node
+                elif caller == ida_idaapi.BADADDR and callee_func_type == FT_VAR and not self.config.show_gvars_nodes:
+                    break
 
                 #################################
                 #
@@ -3898,7 +4056,7 @@ _: print several important internal caches for debugging.
                             prev_callee_id = self.nodes[prev_callee]
                             dst = self.find_dst_node_from_edges(prev_callee_id)
                             if dst < 0 and prev_callee not in self.additional_trace_points:
-                                caller_id = self.add_node(prev_callee, self.exceeded_node_symbol, self.default_color, node_type="Exceeded Node")
+                                caller_id = self.add_node(prev_callee, self.exceeded_node_symbol, self.default_color)
                                 self.add_edge(prev_callee_id, caller_id)
                             else:
                                 # in a case that it has a child node but is string or other type of node, not caller nodes.
@@ -3908,13 +4066,13 @@ _: print several important internal caches for debugging.
                                     dsts = self.find_dst_nodes_from_edges(prev_callee_id)
                                     child_flag = False
                                     for d in dsts:
-                                        if d in self.node_ids and self.node_ids[d] in self.func_relations[prev_callee]['children']:
+                                        if d in self.node_ids and prev_callee in self.func_relations and self.node_ids[d] in self.func_relations[prev_callee]['children']:
                                             child_flag = True
                                             break
                                         
-                                    if not child_flag and len(self.func_relations[prev_callee]['children']) >= 0:
+                                    if not child_flag and prev_callee in self.func_relations and len(self.func_relations[prev_callee]['children']) >= 0:
                                         # if no children and no exceeded symbol, insert exceeded node
-                                        caller_id = self.add_node(prev_callee, self.exceeded_node_symbol, self.default_color, node_type="Exceeded Node")
+                                        caller_id = self.add_node(prev_callee, self.exceeded_node_symbol, self.default_color)
                                         self.add_edge(prev_callee_id, caller_id)
                                     else:
                                         caller_id = None
@@ -3925,14 +4083,13 @@ _: print several important internal caches for debugging.
                             if prev_id is not None:
                                 self.add_edge(prev_id, caller_id)
                         elif prev_callee not in self.additional_trace_points:
-                            caller_id = self.add_node(prev_callee, self.exceeded_node_symbol, self.default_color, node_type="Exceeded Node")
+                            caller_id = self.add_node(prev_callee, self.exceeded_node_symbol, self.default_color)
                             if prev_id is not None:
                                 self.add_edge(prev_id, caller_id)
                         else:
                             caller_id = None
                     # for existing nodes (general nodes)
-                    elif (prev_callee != caller and caller in self.nodes) or caller in self.caller_nodes:
-                    #elif caller in self.nodes:
+                    elif caller in self.caller_nodes:
                         if self.config.debug: self.dbg_print("caller is already existing in nodes list. (caller: %x)" % (caller), prev_callee)
                         if caller in self.caller_nodes:
                             caller_id = self.caller_nodes[caller]
@@ -3954,7 +4111,7 @@ _: print several important internal caches for debugging.
                             color = self.get_color(callee_func_type, caller)
                             # change caller_id to the replaced node
                             caller_id = dst
-                            dst_ea = self.replace_node(dst, line, color, start_ea, caller, node_type="Caller")
+                            dst_ea = self.replace_node(dst, line, color, start_ea, caller, func_type=callee_func_type, caller=True)
                         else:
                             self.update_related_nodes(caller, start_ea)
                             if prev_id is not None and prev_callee != caller:
@@ -3991,13 +4148,40 @@ _: print several important internal caches for debugging.
                         # if a callee has a "..." node, replace it with actual a function pointer.
                         if dst >= 0:
                             caller_id = dst
-                            src_ea = self.replace_node(dst, line, color, start_ea, caller, node_type="Caller")
+                            src_ea = self.replace_node(dst, line, color, start_ea, caller, func_type=callee_func_type, caller=True)
                             srcs = self.find_src_nodes_from_edges(dst)
                             if prev_id not in srcs:
                                 add_node_flag = True
+                                
+                            # after replacing a node, check if cto still needs to insert an exceeded node or not.
+                            if callee in self.nodes:
+                                tmp_callee_id = self.nodes[callee]
+                                tmp_src = self.find_src_node_from_edges(tmp_callee_id, self.exceeded_node_symbol)
+                                if tmp_src < 0:
+                                    # there is no exceeded node
+                                    # get all inserted node ids
+                                    srcs = self.find_src_nodes_from_edges(tmp_callee_id)
+                                    # get all referenced parent paths of the callee address
+                                    for tmp_r in self.trace_paths_with_cache(callee, end_ea, max_recursive=1, direction="parents"):
+                                        # check if there is an undisplayed node
+                                        add_exceeded_node_flag = False
+                                        if len(tmp_r) > 0:
+                                            tmp_caller, tmp_callee, tmp_callee_func_type = tmp_r[0]
+                                            if tmp_caller in self.caller_nodes:
+                                                if self.caller_nodes[tmp_caller] not in srcs:
+                                                    add_exceeded_node_flag = True
+                                            else:
+                                                add_exceeded_node_flag = True
+                                        if add_exceeded_node_flag:
+                                            # if no children and no exceeded symbol, insert exceeded node
+                                            tmp_caller_id = self.add_node(callee, self.exceeded_node_symbol, self.default_color)
+                                            tmp_callee_id = self.nodes[callee]
+                                            self.add_edge(tmp_caller_id, tmp_callee_id)
+                                            break
+                                
                         # create a new node for a new function
                         else:
-                            caller_id = self.add_node(caller, line, color, start_ea, node_type="Caller")
+                            caller_id = self.add_node(caller, line, color, start_ea, func_type=callee_func_type, caller=True)
                             add_node_flag = True
                             
                         if prev_id is not None and add_node_flag:
@@ -4008,7 +4192,7 @@ _: print several important internal caches for debugging.
 
                     # insert an exceeded node if the caller node is in the filter list.
                     if first_hit >= i and caller in self.filtered_nodes:
-                        nid = self.add_node(caller, self.exceeded_node_symbol, self.default_color, node_type="Exceeded Node")
+                        nid = self.add_node(caller, self.exceeded_node_symbol, self.default_color)
                         self.add_edge(prev_id, nid)
                         if self.config.debug:
                             self.dbg_print("updating prev_id, was: ", None, "now: ", prev_id)
@@ -4027,7 +4211,7 @@ _: print several important internal caches for debugging.
                     if callee in self.nodes:
                         if self.config.debug:
                             self.dbg_print("callee (%x) is in nodes" % callee)
-                        callee_id = self.get_node_id(callee, start_ea)
+                        callee_id = self.get_node_id(callee, start_ea, caller=False)
                         if not self.config.skip_caller:
                             if self.config.debug:
                                 self.dbg_print("skip caller is disabled and callee (%x) is in nodes" % callee)
@@ -4047,15 +4231,15 @@ _: print several important internal caches for debugging.
                         if callee in self.nodes:
                             if self.config.debug:
                                 self.dbg_print("callee (%x) is in nodes" % callee)
-                            callee_id = self.get_node_id(callee, start_ea)
+                            callee_id = self.get_node_id(callee, start_ea, caller=False)
                         elif next_caller in self.exceeded_nodes:
                             if self.config.debug:
                                 self.dbg_print("callee (%x) is in exceeded nodes" % callee)
                             callee_id = self.exceeded_nodes[next_caller]
-                            n_ea = self.replace_node(callee_id, line, color, start_ea, callee, node_type="Callee")
+                            n_ea = self.replace_node(callee_id, line, color, start_ea, callee, func_type=callee_func_type, caller=False)
                         elif next_caller in self.exceeded_nodes and callee not in self.nodes:
                             callee_id = self.exceeded_nodes[next_caller]
-                            dst_ea = self.replace_node(callee_id, line, color, start_ea, callee, node_type="Callee")
+                            dst_ea = self.replace_node(callee_id, line, color, start_ea, callee, func_type=callee_func_type, caller=False)
                             dst = -1
                         # find a set of callee and caller but they are not connected yet because the max path limitation is exceeded.
                         elif callee in self.func_relations and len(self.func_relations[callee]['parents']) >= 1:
@@ -4092,6 +4276,9 @@ _: print several important internal caches for debugging.
                                             if self.config.debug:
                                                 self.dbg_print("tmp_ea (%x) is in exceeded nodes" % tmp_ea)
                                             dst = self.exceeded_nodes[tmp_ea]
+                                            dst_ea = self.replace_node(dst, line, color, start_ea, prev_callee, func_type=prev_callee_func_type, caller=False)
+                                            if self.config.debug:
+                                                self.dbg_print("next_callee (%x) is an exceeded node and it's already displayed. it was replaced with next_callee." % next_callee)
                                             break
                                         else:
                                             if self.config.debug:
@@ -4101,7 +4288,7 @@ _: print several important internal caches for debugging.
                                     self.dbg_print("found tmp_ea (%x) has a destination" % tmp_ea)
                                 callee_id = dst
                                 if tmp_ea in self.exceeded_nodes:
-                                    dst_ea = self.replace_node(dst, line, color, start_ea, callee, node_type="Callee")
+                                    dst_ea = self.replace_node(dst, line, color, start_ea, callee, func_type=callee_func_type, caller=False)
                                 else:
                                     if self.config.debug:
                                         self.dbg_print("tmp_ea (%x) is not in exceeded nodes" % tmp_ea)
@@ -4109,17 +4296,17 @@ _: print several important internal caches for debugging.
                             else:
                                 if self.config.debug:
                                     self.dbg_print("callee (%x) does not have any destinations. just add it as a node" % callee)
-                                callee_id = self.add_node(callee, line, color, start_ea, node_type="Callee")
+                                callee_id = self.add_node(callee, line, color, start_ea, func_type=callee_func_type, caller=False)
                         # create a new node for a new function
                         else:
                             if self.config.debug:
                                 self.dbg_print("callee (%x) is a new node. add it as a node" % callee)
-                            callee_id = self.add_node(callee, line, color, start_ea, node_type="Callee")
+                            callee_id = self.add_node(callee, line, color, start_ea, func_type=callee_func_type, caller=False)
                         
                     else:
                         func_name = self.get_callee_name(callee, callee_func_type)
                         color = self.get_color(callee_func_type, callee)
-                        callee_id = self.add_node(callee, func_name, color, start_ea, node_type="Callee")
+                        callee_id = self.add_node(callee, func_name, color, start_ea, func_type=callee_func_type, caller=False)
                     if prev_id is not None:
                         self.add_edge(prev_id, callee_id)
                     if self.config.debug:
@@ -4130,7 +4317,7 @@ _: print several important internal caches for debugging.
                     if first_hit >= i and callee in self.filtered_nodes and next_caller is not None and (callee != next_caller or next_caller in self.caller_nodes):
                         dst = self.find_dst_node_from_edges(callee_id, self.exceeded_node_symbol)
                         if dst < 0 and callee not in self.additional_trace_points:
-                            nid = self.add_node(callee, self.exceeded_node_symbol, self.default_color, node_type="Exceeded Node")
+                            nid = self.add_node(callee, self.exceeded_node_symbol, self.default_color)
                             self.add_edge(callee_id, nid)
                         break
                     # skip underneath nodes of library functions for simple layout
@@ -4141,7 +4328,7 @@ _: print several important internal caches for debugging.
                             if next_caller is not None:
                                 # if there are no nodes under the node yet and there
                                 # is a next node, insert an exceeded node.
-                                caller_id = self.add_node(callee, self.exceeded_node_symbol, self.default_color, node_type="Exceeded Node")
+                                caller_id = self.add_node(callee, self.exceeded_node_symbol, self.default_color)
                                 self.add_edge(prev_id, caller_id)
                                 break
                             else:
@@ -4191,7 +4378,7 @@ _: print several important internal caches for debugging.
                             insert_flag = True
 
                         # find a set of callee and caller but they are not connected yet because the max path limitation is exceeded.
-                        if insert_flag and prev_callee in self.func_relations and len(self.func_relations[prev_callee]['children']) == 1:
+                        if insert_flag and prev_callee in self.func_relations and len(self.func_relations[prev_callee]['children']) >= 1:
                             if self.config.debug:
                                 self.dbg_print("insert_flag is true")
                             dst = -1
@@ -4218,8 +4405,12 @@ _: print several important internal caches for debugging.
                                                 if self.config.debug:
                                                     self.dbg_print("prev_callee (%x) is in additional trace points" % prev_callee)
                                                 pass
+                                            #elif tmp_ea in self.nodes and prev_callee not in self.nodes:
+                                            #    self.dbg_print("a dst node (tmp_ea) (%x) is already inserted." % tmp_ea)
+                                            #    insert_flag = False
                                             else:
-                                                dst = -1
+                                                insert_flag = False
+                                                #dst = -1
                                                 if self.config.debug:
                                                     self.dbg_print("prev_callee (%x) is not displayed yet." % prev_callee)
                                             break
@@ -4229,8 +4420,9 @@ _: print several important internal caches for debugging.
                                             self.dbg_print("prev_callee (%x) is a tmp_ea's (%x) child" % (prev_callee, tmp_ea))
                                         if prev_callee in self.nodes and tmp_ea in self.exceeded_nodes:
                                             dst = self.exceeded_nodes[tmp_ea]
+                                            dst_ea = self.replace_node(dst, line, color, start_ea, prev_callee, func_type=prev_callee_func_type, caller=False)
                                             if self.config.debug:
-                                                self.dbg_print("prev_callee (%x) is already displayed as a node" % prev_callee)
+                                                self.dbg_print("prev_callee (%x) is an exceeded node and it's already displayed. it was replaced with next_callee." % prev_callee)
                                             self.add_edge(callee_id, dst)
                                             break
                                         elif prev_callee in self.additional_trace_points:
@@ -4252,7 +4444,7 @@ _: print several important internal caches for debugging.
                                 insert_flag = True
                         
                         if insert_flag:
-                            callee_id = self.add_node(prev_callee, self.exceeded_node_symbol, self.default_color, node_type="Exceeded Node")
+                            callee_id = self.add_node(prev_callee, self.exceeded_node_symbol, self.default_color)
                             prev_callee_id = self.nodes[prev_callee]
                             self.add_edge(prev_callee_id, callee_id)
                             
@@ -4262,7 +4454,7 @@ _: print several important internal caches for debugging.
                         if callee_func_type == FT_MEM and caller != ida_idaapi.BADADDR:
                             line = self.get_space_removed_disasm(caller)
                             color = self.get_color(callee_func_type, caller)
-                            nid = self.add_node(caller, line, color, start_ea, node_type="Caller")
+                            nid = self.add_node(caller, line, color, start_ea, func_type=callee_func_type, caller=True)
                             self.add_edge(prev_id, nid)
                             callee_id = nid
 
@@ -4278,7 +4470,7 @@ _: print several important internal caches for debugging.
                                         callee_id = i
                                         break
                                 if not found_flag:
-                                    callee_id = self.add_node(ida_idaapi.BADADDR, self.color_callee_str(func_name, func_type), self.get_color(func_type), start_ea, node_type="Dynamic Call")
+                                    callee_id = self.add_node(ida_idaapi.BADADDR, self.color_callee_str(func_name, func_type), self.get_color(func_type), start_ea, func_type=func_type, caller=False, node_type="Dynamic Call")
                                     tif = tinfo.get_tinfo_by_name(func_name)
                                     if tif:
                                         tinfo.apply_tinfo_to_ea(tif, caller, opn)
@@ -4302,7 +4494,7 @@ _: print several important internal caches for debugging.
                             func_type = FT_UNK
                             opn = -1
                             func_name = ""
-                            for dref_ea, dref_func_ea, dref_off_ea in get_func_relation.get_dref_belong_to_func(prev_callee):
+                            for dref_ea, dref_func_ea, dref_off_ea in get_func_relation.get_dref_from_belong_to_func(prev_callee):
                                 if dref_ea in self.func_relations[dref_func_ea]["strings"]:
                                     _, func_type, opn, func_name = self.func_relations[dref_func_ea]["strings"][dref_ea]
                                     break
@@ -4317,7 +4509,7 @@ _: print several important internal caches for debugging.
                                     callee_id = i
                                     break
                             if not found_flag:
-                                callee_id = self.add_node(ida_idaapi.BADADDR, self.color_callee_str(func_name, func_type), self.get_color(func_type), start_ea, node_type="Dynamic Call")
+                                callee_id = self.add_node(ida_idaapi.BADADDR, self.color_callee_str(func_name, func_type), self.get_color(func_type), start_ea, func_type=func_type, caller=False, node_type="Dynamic Call")
                                 tif = tinfo.get_tinfo_by_name(func_name)
                                 if tif:
                                     tinfo.apply_tinfo_to_ea(tif, caller, opn)
@@ -4332,21 +4524,35 @@ _: print several important internal caches for debugging.
                 if first_hit >= i and callee in self.filtered_nodes:
                     dst = self.find_dst_node_from_edges(callee_id, self.exceeded_node_symbol)
                     if dst < 0 and callee not in self.additional_trace_points:
-                        nid = self.add_node(callee, self.exceeded_node_symbol, self.default_color, node_type="Exceeded Node")
+                        nid = self.add_node(callee, self.exceeded_node_symbol, self.default_color)
                         self.add_edge(callee_id, nid)
                         # if CTO inserts an exceeded nodes, skip the strings, variables and comments and so on
                         #continue
+                        
+                # insert a string content node
+                if callee_func_type == FT_STR and callee != ida_idaapi.BADADDR:
+                    ref_func_ea = prev_callee
+                    ref_ea = ida_idaapi.BADADDR
+                    if prev_callee not in self.func_relations:
+                        if len(r) > 2 and i >= 2:
+                            ref_func_ea = r[i-2][1]
+                            ref_ea = prev_callee
+                        elif len(r) >= 2 and i == 1:
+                            ref_func_ea = start_ea
+                            ref_ea = r[0][1]
+                    if ref_func_ea != ida_idaapi.BADADDR:
+                        self.insert_string_node(callee, ref_func_ea, prev_id, ref_ea)
                 
                 #if i < self.max_depth - 1:
                 if callee != ida_idaapi.BADADDR and callee in self.func_relations:
                     # adding strings nodes
-                    self.insert_string_node(callee)
+                    #self.insert_string_node(callee)
                     
                     # adding global/static variable nodes
-                    self.insert_var_node(callee, func_type="gvars", node_type="Global/Static Vars Ref", node_color=self.gvars_color, loc_cache=self.gvars_contents, show_flag=self.config.show_gvars_nodes, skip_content=False)
+                    #self.insert_var_node(callee, func_type="gvars", node_type="Global/Static Vars Ref", node_color=self.gvars_color, loc_cache=self.gvars_contents, show_flag=self.config.show_gvars_nodes, skip_content=False)
                     
                     # adding structure member access nodes
-                    self.insert_var_node(callee, func_type="struct_offsets", node_type="Struct Members", node_color=self.stroff_color, loc_cache=self.stroff_contents, show_flag=self.config.show_stroff_nodes, skip_content=True)
+                    #self.insert_var_node(callee, func_type="struct_offsets", node_type="Struct Members", node_color=self.stroff_color, loc_cache=self.stroff_contents, show_flag=self.config.show_stroff_nodes, skip_content=True)
                     
                     # adding comments nodes
                     self.insert_comment_node(callee)
@@ -4492,15 +4698,17 @@ _: print several important internal caches for debugging.
             
             if self.icon_id > 0:
                 ida_kernwin.update_action_icon(actname, self.icon_id)
+                
+        self.get_focus(self.GetWidget())
         return r
 
-def exec_cto(cto_data=None, curr_view=None, debug=False):
+def exec_cto(cto_data=None, curr_view=None, max_depth=1, debug=False):
     if debug or ("g_debug" in globals() and g_debug):
         debug = True
     try:
         r = ida_auto.auto_wait()
         if r:
-            cto = CallTreeOverviewer(ida_kernwin.get_screen_ea(), cto_data=cto_data, curr_view=curr_view, debug=debug)
+            cto = CallTreeOverviewer(ida_kernwin.get_screen_ea(), cto_data=cto_data, curr_view=curr_view, max_depth=max_depth, debug=debug)
         else:
             ida_kernwin.msg("IDA is still in automatic analysis and you have canceled the plugin execution. Do it later again if you need.%s" % (os.linesep))
     except Exception as e:
