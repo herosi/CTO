@@ -25,7 +25,8 @@
         "0x8664": {"name": "IMAGE_FILE_MACHINE_AMD64", "optype":[], "mnems":[], "opn":[], "opsz":[]},
         "0x555555555555555": {"name": "max list size for VC++ 2019 x64", "optype":[], "mnems":[], "opn":[], "opsz":[]},
         "0x83828180": {"name": "LZO_UINT32_C_LE", "optype":[], "mnems":[], "opn":[], "opsz":[]},
-        "0x80818283": {"name": "LZO_UINT32_C_BE", "optype":[], "mnems":[], "opn":[], "opsz":[]}
+        "0x80818283": {"name": "LZO_UINT32_C_BE", "optype":[], "mnems":[], "opn":[], "opsz":[]},
+		"0x1824429d": {"name": "LZO_Compress", "optype":[], "mnems":[], "opn":[], "opsz":[]}
     },
     "multiple":{
         "PE Sec": {
@@ -62,6 +63,16 @@
             "min": 3,
             "require": ["0xb0", "0x3c", "0x30"],
             "max": {"0xb0":2, "0x3c":2}
+        },
+        "An rc4 implementation": {
+            "consts":{
+                "0x100": {"name": "RC4", "optype":[], "mnems":[], "opn":[], "opsz":[]}, 
+                "0x800000FF": {"name": "RC4", "optype":[], "mnems":[], "opn":[], "opsz":[]}, 
+                "0xFFFFFF00": {"name": "RC4", "optype":[], "mnems":[], "opn":[], "opsz":[]}
+            },
+            "min": 3,
+            "require": ["0x100", "0x800000FF", "0xFFFFFF00"],
+            "max": {}
         }
     }
 }

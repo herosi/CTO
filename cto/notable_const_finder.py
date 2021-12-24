@@ -10,6 +10,8 @@ import ida_segment
 import os
 import json
 
+import cto_utils
+ida_idaapi.require("cto_utils")
 #import segments
 #ida_idaapi.require("segments")
 
@@ -105,6 +107,9 @@ class notable_const_t(object):
             dtype = op.dtype
             opsz = get_op_size(dtype)
             v = idc.get_operand_value(ea, i)
+            if cto_utils.is_32bit(ea):
+                v &= 0xffffffff
+                #print(hex(v))
             flags = ida_bytes.get_full_flags(v)
             op_flag = ida_bytes.get_item_flag(ida_idaapi.BADADDR, i, ea, 0)
             if ida_bytes.is_numop(op_flag, i) or (optype in [ida_ua.o_phrase, ida_ua.o_imm, ida_ua.o_displ] and not ida_bytes.is_stkvar(op_flag, i) and not ida_bytes.is_stroff(op_flag, i) and not ida_bytes.is_enum(op_flag, i) and not ida_bytes.is_off(op_flag, i)):

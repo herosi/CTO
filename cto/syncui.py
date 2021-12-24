@@ -74,7 +74,7 @@ class my_ui_hooks_t(ida_kernwin.UI_Hooks):
                 if ea in self.v().func_relations[f.start_ea][k]:
                     r = True
                     break
-                if ea in [self.v().func_relations[f.start_ea][k][x][0] for x in self.v().func_relations[f.start_ea][k] if len(self.v().func_relations[f.start_ea][k][x]) > 0]:
+                if ea in [self.v().func_relations[f.start_ea][k][x][0] for x in self.v().func_relations[f.start_ea][k] if len(self.v().func_relations[f.start_ea][k][x]) > 0 and isinstance(self.v().func_relations[f.start_ea][k][x], tuple)]:
                     r = True
                     break
         elif ea in self.v().import_eas:

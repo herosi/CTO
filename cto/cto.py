@@ -258,7 +258,8 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                         ni.bg_color    = self.v().selected_bg_color
                         self.v().SetNodeInfo(nid, ni, ida_graph.NIF_BG_COLOR|ida_graph.NIF_FRAME_COLOR)
                 # if now_ea is not in ea, and auto reload flag is enabled, then reload and return to draw a new graph based on now_ea.
-                elif self.v().config.auto_reload_outside_node and (now_ea in self.v().func_relations or f or now_ea in self.v().vtbl_refs) and not self.v().dont_auto_reload:
+                # disable for subgraphs
+                elif self.v().config.auto_reload_outside_node and (now_ea in self.v().func_relations or f or now_ea in self.v().vtbl_refs) and not self.v().parent and not self.v().dont_auto_reload:
                     if self.v().config.debug:
                         self._log("auto reloading")
                         
@@ -2369,7 +2370,7 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
             # If you access a node that has a high number after expanding tree with "+" key and
             # then "-" key to shrink the tree and then press escape key to try to return to the previous location,
             # IDA will crash because CTO does not have the node anymore but CTO tries to access it.
-            self.exec_ida_ui_action("EmptyStack")
+            #self.exec_ida_ui_action("EmptyStack")
             self.exec_ui_action("EmptyStack")
         # decrease the maximum depth to dig deeper
         elif c == '-':
@@ -2384,7 +2385,7 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                 # If you access a node that has a high number after expanding tree with "+" key and
                 # then "-" key to shrink the tree and then press escape key to try to return to the previous location,
                 # IDA will crash because CTO does not have the node anymore but CTO tries to access it.
-                self.exec_ida_ui_action("EmptyStack")
+                #self.exec_ida_ui_action("EmptyStack")
                 self.exec_ui_action("EmptyStack")
             else:
                 ida_kernwin.msg("the maximum depth is already one." + os.linesep)
@@ -2399,7 +2400,7 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                 # If you access a node that has a high number after expanding tree with "+" key and
                 # then "-" key to shrink the tree and then press escape key to try to return to the previous location,
                 # IDA will crash because CTO does not have the node anymore but CTO tries to access it.
-                self.exec_ida_ui_action("EmptyStack")
+                #self.exec_ida_ui_action("EmptyStack")
                 self.exec_ui_action("EmptyStack")
             else:
                 ida_kernwin.msg("the maximum depth (%d) or the number of the nodes (%d) is too big. Expand a node you want manually.%s" % (self.max_depth, len(self.nodes), os.linesep))
@@ -3115,6 +3116,7 @@ _: print several important internal caches for debugging.
         self._nodes[nid] = (text, color)
         ea = self.exceeded_node_ids.pop(nid)
         self.exceeded_nodes.pop(ea)
+        #self.remove_trace_cache(ea, self.start_ea)
         if nid in self.exceeded_node_ids and dst_ea == ida_idaapi.BADADDR and self.exceeded_node_ids[nid] != dst_ea:
             pass
         else:
@@ -3313,6 +3315,26 @@ _: print several important internal caches for debugging.
             for r in self.trace_paths_append_cache(start_ea, end_ea, fn_keys, cache, max_recursive=max_recursive, direction=direction):
                 yield r
                 
+    """
+    def remove_trace_cache(self, ea, start_ea):
+        self.dbg_print("enter remove_trace_cache", hex(ea))
+        cache = self.paths_cache
+        if self.parent:
+            cache = self.parent.paths_cache
+        
+        if start_ea in [x[0] for x in cache]:
+            for sea, eea, direction, max_recursive, fn_keys, skip_api, skip_lib in cache:
+                if sea == start_ea:
+                    to_be_removed = set([])
+                    for routes in cache[(sea, eea, direction, max_recursive, fn_keys, skip_api, skip_lib)]:
+                        for r in routes:
+                            if r[0] == ea or r[1] == ea:
+                                to_be_removed.add(routes)
+                                self.dbg_print("this cache will be removed", [hex(x) for x in r])
+                    for routes in to_be_removed:
+                        cache[(sea, eea, direction, max_recursive, fn_keys, skip_api, skip_lib)].remove(routes)
+    """
+                        
     """
     def insert_dref_node_info(self, start_ea, direction):
         if start_ea in self.func_relations:
@@ -4138,16 +4160,17 @@ _: print several important internal caches for debugging.
                             # dst_ea is callee. continue the replacing process.
                             if dst_ea in self.func_relations:
                                 if self.config.debug: self.dbg_print("dst is callee %d, %x" % (dst, dst_ea))
-                                pass
+                                dst = -1
                             # dst_ea is caller. caller's child is not caller. I do not replace.
                             else:
                                 if self.config.debug: self.dbg_print("dst is caller: %d, %x" % (dst, dst_ea))
-                                dst = -1
+                                pass
 
                         add_node_flag = False
                         # if a callee has a "..." node, replace it with actual a function pointer.
                         if dst >= 0:
                             caller_id = dst
+                            #src_ea = self.replace_node(dst, line, color, start_ea, caller, func_type=callee_func_type, caller=True)
                             src_ea = self.replace_node(dst, line, color, start_ea, caller, func_type=callee_func_type, caller=True)
                             srcs = self.find_src_nodes_from_edges(dst)
                             if prev_id not in srcs:

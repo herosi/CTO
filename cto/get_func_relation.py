@@ -1265,7 +1265,9 @@ def get_drefs(func_ea, ea, direction, vtbl_refs, debug=False, dbg_print_func=Non
     return drefs
 
 def _append_result(result, next_ea, next_func_ea, next_func_type, dref_off_ea, direction, func_relations, append_exceeded=False):
-    if dref_off_ea != ida_idaapi.BADADDR and next_func_ea != ida_idaapi.BADADDR and dref_off_ea != next_func_ea:
+    if ida_struct.get_struc_name(dref_off_ea):
+        result.append((next_ea, next_func_ea, next_func_type))
+    elif dref_off_ea != ida_idaapi.BADADDR and next_func_ea != ida_idaapi.BADADDR and dref_off_ea != next_func_ea:
         next_next_func_type = next_func_type
         if next_func_ea in func_relations:
             next_next_func_type = func_relations[next_func_ea]['func_type']
@@ -1302,7 +1304,8 @@ def append_result(result, next_ea, next_func_ea, next_func_type, dref_off_ea, di
 def _pop_result(result, next_ea, next_func_ea, next_func_type, dref_off_ea, direction, append_exceeded=False):
     result.pop(-1)
     if dref_off_ea != ida_idaapi.BADADDR and next_func_ea != ida_idaapi.BADADDR and dref_off_ea != next_func_ea:
-        result.pop(-1)
+        if not ida_struct.get_struc_name(dref_off_ea):
+            result.pop(-1)
     if append_exceeded:
         result.pop(-1)
 

@@ -5,6 +5,7 @@ import ida_idaapi
 import ida_kernwin
 import ida_strlist
 import ida_bytes
+import ida_segment
 
 import sys
 
@@ -102,3 +103,22 @@ def count_bbs(ea):
         #print("%x" % ea, list(fc))
         return len(list(fc))
     return 0
+
+def is_64bit(ea):
+    flag = False
+    seg = ida_segment.getseg(ea)
+    if seg and seg.use64():
+        flag = True
+    return flag
+
+def is_32bit(ea):
+    flag = False
+    seg = ida_segment.getseg(ea)
+    if seg:
+        if hasattr(seg, "use32"):
+            if seg.use32():
+                flag = True
+        else:
+            if not is_64bit(ea):
+                flag = True
+    return flag
