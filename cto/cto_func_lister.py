@@ -48,6 +48,17 @@ FT_STR = get_func_relation.FT_STR
 FT_STO = get_func_relation.FT_STO
 FT_VTB = get_func_relation.FT_VTB
 
+class MyFilterProxyModel510(QtCore.QSortFilterProxyModel):
+    itemDataChanged = QtCore.pyqtSignal(QtCore.QModelIndex, str, str, int)
+
+    # for observing renaming events
+    def setData(self, index, value, role=QtCore.Qt.EditRole):
+        oldvalue = index.data(role)
+        result = super(MyFilterProxyModel510, self).setData(index, value, role)
+        if result and value != oldvalue:
+            self.itemDataChanged.emit(index, oldvalue, value, role)
+        return result
+
 class MyFilterProxyModel(QtCore.QSortFilterProxyModel):
     itemDataChanged = QtCore.pyqtSignal(QtCore.QModelIndex, str, str, int)
     
@@ -184,12 +195,13 @@ class MyWidget(QtWidgets.QTreeView):
         
         # set proxy model for filter
         if (self.qt_ver[0] >= 5 and self.qt_ver[1] >= 10) or self.qt_ver >= 6:
-            self.proxy_model = QtCore.QSortFilterProxyModel()
+            #self.proxy_model = QtCore.QSortFilterProxyModel()
+            self.proxy_model = MyFilterProxyModel510()
             # the option is available only 5.10 and above
             self.proxy_model.setRecursiveFilteringEnabled(True)
         else:
             self.proxy_model = MyFilterProxyModel()
-        # cange the filter method according to the version
+        # change the filter method according to the version
         if (self.qt_ver[0] >= 5 and self.qt_ver[1] >= 12) or self.qt_ver >= 6:
             self.filterChanged = self._filterChanged_512
         else:
@@ -201,8 +213,7 @@ class MyWidget(QtWidgets.QTreeView):
         # connect tree view with source item model through proxy model
         self.setModel(self.proxy_model)
         self.proxy_model.setSourceModel(self.model)
-        if self.qt_ver[0] == 5 and self.qt_ver[1] < 12:
-            self.proxy_model.itemDataChanged.connect(self.handleItemDataChanged)
+        self.proxy_model.itemDataChanged.connect(self.handleItemDataChanged)
         
         # set selection model for synchronizing with ida
         self.sel_model = QtCore.QItemSelectionModel(self.proxy_model)
@@ -372,18 +383,17 @@ class MyWidget(QtWidgets.QTreeView):
         QtWidgets.QTreeView.currentChanged(self, current, previous)
         self.current_changed.emit(current, previous)
         #print(current, previous)
-        
+
     def handleItemDataChanged(self, idx, old_val, new_val, role):
         if role == QtCore.Qt.EditRole:
             if idx is not None and idx.isValid():
                 #self.dbg_print(idx.model())
                 if idx.model() == self.proxy_model:
                     idx = self.proxy_model.mapToSource(idx)
-            #if idx is not None and idx.isValid(): self.dbg_print(idx.model())
             if idx is not None and idx.isValid():
                 # send the single to the parent widget
                 self.item_changed.emit(idx, old_val, new_val)
-            
+    
     def eventFilter(self, src, event):
         flag = False
         if event.type() == QtCore.QEvent.KeyPress:
@@ -536,6 +546,7 @@ class cto_func_lister_t(cto_base.cto_base, ida_kernwin.PluginForm):
         ida_kernwin.PluginForm.__init__(self)
         cto_base.cto_base.__init__(self, cto_data, curr_view, debug)
         
+        self.qt_ver = qtutils.get_qver()
 	
         # Create tree control
         self.tree = MyWidget()
