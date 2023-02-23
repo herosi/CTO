@@ -174,7 +174,7 @@ class MyWidget(QtWidgets.QTreeView):
         # generate source model
         self.model = QtGui.QStandardItemModel()
         #self.modeltest = ModelTest(self.model, self)
-        self.model.setHorizontalHeaderLabels(['Name','Address', 'CR', 'BB', 'FN', 'A/L', 'GV', 'STR'])
+        self.model.setHorizontalHeaderLabels(['Name','Address', 'XR', 'BB', 'FN', 'A/L', 'GV', 'STR'])
         self.model.horizontalHeaderItem(2).setToolTip("Xrefs to count")
         self.model.horizontalHeaderItem(3).setToolTip("Basic blocks count")
         self.model.horizontalHeaderItem(4).setToolTip("Internal function pointers count")
@@ -189,7 +189,7 @@ class MyWidget(QtWidgets.QTreeView):
             self.proxy_model.setRecursiveFilteringEnabled(True)
         else:
             self.proxy_model = MyFilterProxyModel()
-        # change the filter method according to the version
+        # cange the filter method according to the version
         if (self.qt_ver[0] >= 5 and self.qt_ver[1] >= 12) or self.qt_ver >= 6:
             self.filterChanged = self._filterChanged_512
         else:
@@ -936,6 +936,8 @@ class cto_func_lister_t(cto_base.cto_base, ida_kernwin.PluginForm):
         return use_opn
     
     def jump_to_idx(self, idx):
+        # before jumping get the first column idx, which has ea.
+        idx = idx.sibling(idx.row(), 0)
         use_opn = self.does_use_opn(idx)
         ea, name, mod_name, ea_type = self.get_ea_by_idx(idx)
         if ea != ida_idaapi.BADADDR:
@@ -1356,11 +1358,12 @@ D: enable/disable Debug mode
         
         # adjust header length manually
         #self.tree.header().setCascadingSectionResizes(True)
+        self.tree.header().setMinimumSectionSize(10)
         self.tree.header().setSectionResizeMode(0, self.tree.header().Interactive)
-        self.tree.header().setSectionResizeMode(1, self.tree.header().Interactive)
+        #self.tree.header().setSectionResizeMode(1, self.tree.header().Interactive)
         self.tree.header().setStretchLastSection(False)
         self.tree.header().resizeSection(0, 180)
-        for i in range(2,8):
+        for i in range(1,8):
             self.tree.resizeColumnToContents(i)
         
         # =============================
