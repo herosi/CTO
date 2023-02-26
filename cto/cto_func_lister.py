@@ -172,13 +172,14 @@ class MyWidget(QtWidgets.QTreeView):
         # generate source model
         self.model = QtGui.QStandardItemModel()
         #self.modeltest = ModelTest(self.model, self)
-        self.model.setHorizontalHeaderLabels(['Name','Address', 'XR', 'BB', 'FN', 'A/L', 'GV', 'STR'])
+        self.model.setHorizontalHeaderLabels(['Name','Address', 'XR', 'BB', 'FN', 'UFN', 'A/L', 'GV', 'STR'])
         self.model.horizontalHeaderItem(2).setToolTip("Xrefs to count")
         self.model.horizontalHeaderItem(3).setToolTip("Basic blocks count")
         self.model.horizontalHeaderItem(4).setToolTip("Internal function pointers count")
-        self.model.horizontalHeaderItem(5).setToolTip("APIs/Libs count")
-        self.model.horizontalHeaderItem(6).setToolTip("Global variables count")
-        self.model.horizontalHeaderItem(7).setToolTip("Strings count")
+        self.model.horizontalHeaderItem(5).setToolTip("Unique internal function pointers count")
+        self.model.horizontalHeaderItem(6).setToolTip("APIs/Libs count")
+        self.model.horizontalHeaderItem(7).setToolTip("Global variables count")
+        self.model.horizontalHeaderItem(8).setToolTip("Strings count")
         
         # set proxy model for filter
         if (self.qt_ver[0] >= 5 and self.qt_ver[1] >= 10) or self.qt_ver[0] >= 6:
@@ -1571,8 +1572,11 @@ D: enable/disable Debug mode
             func_name = ida_name.get_name(func_ea)
         return func_name
 
-    def count_func_type(self, func_ea, func_types):
-        return len([ft for k,(d,ft,_,_) in self.func_relations[func_ea]['children'].items() if ft in func_types])
+    def count_func_type(self, func_ea, func_types, uniq=False):
+        r = [d for k,(d,ft,_,_) in self.func_relations[func_ea]['children'].items() if ft in func_types]
+        if uniq:
+            r = set(r)
+        return len(r)
     
     def RegisterFuncToTree(self, parent, func_ea, func_name, ea_dict, idx_dict, other_data=None, row=-1):
         ifunc_name = QtGui.QStandardItem("%s" % (func_name))
@@ -1585,6 +1589,8 @@ D: enable/disable Debug mode
         ifunc_bb_cnt.setData(cto_utils.count_bbs(func_ea), QtCore.Qt.DisplayRole)
         ifunc_internal_funcs_cnt = QtGui.QStandardItem()
         ifunc_internal_funcs_cnt.setData(self.count_func_type(func_ea, [FT_GEN]), QtCore.Qt.DisplayRole)
+        ifunc_uniq_internal_funcs_cnt = QtGui.QStandardItem()
+        ifunc_uniq_internal_funcs_cnt.setData(self.count_func_type(func_ea, [FT_GEN], True), QtCore.Qt.DisplayRole)
         ifunc_api_lib_cnt = QtGui.QStandardItem()
         ifunc_api_lib_cnt.setData(self.count_func_type(func_ea, [FT_API, FT_LIB]), QtCore.Qt.DisplayRole)
         ifunc_gvar_cnt = QtGui.QStandardItem()
@@ -1596,13 +1602,14 @@ D: enable/disable Debug mode
         ifunc_xref_cnt.setEditable(False)
         ifunc_bb_cnt.setEditable(False)
         ifunc_internal_funcs_cnt.setEditable(False)
+        ifunc_uniq_internal_funcs_cnt.setEditable(False)
         ifunc_api_lib_cnt.setEditable(False)
         ifunc_gvar_cnt.setEditable(False)
         ifunc_str_cnt.setEditable(False)
         if row >= 0:
-            parent.insertRow(row, (ifunc_name, ifunc_addr, ifunc_xref_cnt, ifunc_bb_cnt, ifunc_internal_funcs_cnt, ifunc_api_lib_cnt, ifunc_gvar_cnt, ifunc_str_cnt))
+            parent.insertRow(row, (ifunc_name, ifunc_addr, ifunc_xref_cnt, ifunc_bb_cnt, ifunc_internal_funcs_cnt, ifunc_uniq_internal_funcs_cnt, ifunc_api_lib_cnt, ifunc_gvar_cnt, ifunc_str_cnt))
         else:
-            parent.appendRow((ifunc_name, ifunc_addr, ifunc_xref_cnt, ifunc_bb_cnt, ifunc_internal_funcs_cnt, ifunc_api_lib_cnt, ifunc_gvar_cnt, ifunc_str_cnt))
+            parent.appendRow((ifunc_name, ifunc_addr, ifunc_xref_cnt, ifunc_bb_cnt, ifunc_internal_funcs_cnt, ifunc_uniq_internal_funcs_cnt, ifunc_api_lib_cnt, ifunc_gvar_cnt, ifunc_str_cnt))
         
         idx = self.model.indexFromItem(ifunc_name)
         idx_addr = self.model.indexFromItem(ifunc_addr)
@@ -1686,7 +1693,7 @@ D: enable/disable Debug mode
         # change the columns size
         # This does not work after displaying the widget.
         # That's why I inserted this here.
-        for i in range(1,8):
+        for i in range(1,9):
             self.tree.resizeColumnToContents(i)
             
         return r
