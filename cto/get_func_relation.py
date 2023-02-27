@@ -487,7 +487,8 @@ def get_funcptr_ea(ea, bbs, import_eas, string_eas):
     insn = ida_ua.insn_t()
     inslen = ida_ua.decode_insn(insn, ea)
     for i in range(inslen):
-        optype = insn.ops[n].type
+        op = insn.ops[i]
+        optype = op.type
         if ida_ua.o_void == optype:
             i = -1
             break
