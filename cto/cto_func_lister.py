@@ -1679,13 +1679,15 @@ D: enable/disable Debug mode
     def show(self):
         # show the list
         r = self.Show()
-
+        
+        # dock it next to the function window
         if r:
             # use the option not to close by pressing ESC key
             ida_kernwin.display_widget(self.GetWidget(), ida_kernwin.WOPN_NOT_CLOSED_BY_ESC, None)
             
             ida_kernwin.set_dock_pos(self.title, "Functions window", ida_kernwin.DP_TAB)
             
+        # change the icon and colors
         self.change_widget_icon(bg_change=self.config.dark_mode)
         if self.config.dark_mode:
             self.tree.reset_btn_size()
@@ -1696,6 +1698,16 @@ D: enable/disable Debug mode
         for i in range(1,9):
             self.tree.resizeColumnToContents(i)
             
+        # move to the current screen ea location
+        # Moving to the screen ea only works well after displaying the widgets.
+        # That is why this is inserted here.
+        ea = ida_kernwin.get_screen_ea()
+        if ea != ida_idaapi.BADADDR:
+            self.expand_item_by_ea(ea)
+            
+        # focus the tree widget
+        self.tree.setFocus()
+        
         return r
 
 # --------------------------------------------------------------------------
