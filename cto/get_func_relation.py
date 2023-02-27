@@ -480,7 +480,7 @@ def get_str(ea, v, string_eas):
     #print("%x" % ea, data, data_type)
     return data, data_type
 
-def get_funcptr_ea(ea, bbs, import_eas, string_eas):
+def get_funcptr_ea(ea, import_eas, string_eas):
     target_ea = ida_idaapi.BADADDR
     func_type = FT_UNK
     func_name = ""
@@ -489,6 +489,7 @@ def get_funcptr_ea(ea, bbs, import_eas, string_eas):
     for i in range(inslen):
         op = insn.ops[i]
         optype = op.type
+        
         if ida_ua.o_void == optype:
             i = -1
             break
@@ -513,14 +514,14 @@ def get_funcptr_ea(ea, bbs, import_eas, string_eas):
         # call    sub_xxxxxxxx
         # for jump to a sub routine (jmp     sub_xxxxxxxxxx)
         if optype in [ida_ua.o_near, ida_ua.o_far]:
-            if not is_ea_in_func(v, bbs):
+            if not ida_funcs.is_same_func(v, ea):
                 target_ea = v
                 func_type = get_func_type(target_ea, import_eas, func_type)
                 yield target_ea, func_type, i, func_name
         # mov    r8, sub_xxxxxxxxx
         elif optype in [ida_ua.o_imm]:
             # flags > 0 means that it is not just a value, but ea.
-            if flags > 0 and not is_ea_in_func(v, bbs):
+            if flags > 0 and not ida_funcs.is_same_func(v, ea):
                 target_ea = get_offset_fptr(v)
                 if ida_bytes.is_code(flags):
                     target_ea = v
@@ -561,7 +562,7 @@ def get_funcptr_ea(ea, bbs, import_eas, string_eas):
                 break
             # lea     r8, sub_18002BE60
             # mov     r9, cs:hModule
-            elif flags > 0 and not is_ea_in_func(v, bbs):
+            elif flags > 0 and not ida_funcs.is_same_func(v, ea):
                 target_ea = get_offset_fptr(v)
                 if ida_bytes.is_code(flags):
                     target_ea = v
@@ -646,7 +647,18 @@ def get_funcptr_ea(ea, bbs, import_eas, string_eas):
         # jmp     r9
         elif optype in [ida_ua.o_reg, ida_ua.o_displ, ida_ua.o_phrase]:
             v = get_ref_func(ea)
-            target_ea = get_offset_fptr(v)
+            #target_ea = get_offset_fptr(v)
+            if optype in [ida_ua.o_reg] and v != ida_idaapi.BADADDR:
+                # for having an offset of an API
+                target_ea = get_offset_fptr(v)
+                if target_ea == ida_idaapi.BADADDR:
+                    # for having an offset of a pointer
+                    target_ea = v
+                func_type = get_func_type(target_ea, import_eas)
+                if func_type == FT_UNK:
+                    func_type = FT_MEM
+                yield target_ea, func_type, i, func_name
+                """
             # for having an offset of an API
             if optype in [ida_ua.o_reg] and target_ea != ida_idaapi.BADADDR:
                 func_type = get_func_type(target_ea, import_eas)
@@ -661,6 +673,7 @@ def get_funcptr_ea(ea, bbs, import_eas, string_eas):
                 if func_type == FT_UNK:
                     func_type = FT_MEM
                 yield target_ea, func_type, i, func_name
+            """
             # unresolved indirect calls
             elif is_call_insn(ea) or (is_indirect_jump_insn(ea) and not get_switch_info(ea)):
                 func_type = FT_MEM
@@ -717,12 +730,30 @@ def get_stroff_ea(ea, import_eas):
     insn = ida_ua.insn_t()
     inslen = ida_ua.decode_insn(insn, ea)
     for i in range(inslen):
-        if ida_ua.o_void == insn.ops[i].type:
+        op = insn.ops[i]
+        optype = op.type
+        
+        if ida_ua.o_void == optype:
             i = -1
             break
         
-        optype = idc.get_operand_type(ea, i)
-        v = idc.get_operand_value(ea, i)
+        #optype = idc.get_operand_type(ea, i)
+        #v = idc.get_operand_value(ea, i)
+        
+        # get operand value
+        if op.type in [ ida_ua.o_mem, ida_ua.o_far, ida_ua.o_near, ida_ua.o_displ ]:
+            v = op.addr
+        elif op.type == ida_ua.o_reg:
+            v = op.reg
+        elif op.type == ida_ua.o_imm:
+            v = op.value
+        elif op.type == ida_ua.o_phrase:
+            v = op.phrase
+        else:
+            v = -1
+        
+        #optype = idc.get_operand_type(ea, i)
+        #v = idc.get_operand_value(ea, i)
         flags = ida_bytes.get_full_flags(v)
         if optype in [ida_ua.o_displ, ida_ua.o_phrase]:
             vv = get_ref_func(ea)
@@ -776,7 +807,7 @@ def get_vtbl_methods(target_ea, vtbl):
             break
         ea = get_offset_fptr(target_ea)
         
-def get_calls_in_bb(bb, bbs, import_eas, string_eas, result=None, apicalls=None, gvars=None, strings=None, stroff=None, vtbl=None):
+def get_calls_in_bb(bb, import_eas, string_eas, result=None, apicalls=None, gvars=None, strings=None, stroff=None, vtbl=None):
     if result is None:
         result = {}
     if apicalls is None:
@@ -791,7 +822,7 @@ def get_calls_in_bb(bb, bbs, import_eas, string_eas, result=None, apicalls=None,
         vtbl = {}
     ea = bb.start_ea
     while ea < bb.end_ea:
-        for target_ea, func_type, op, target_name in get_funcptr_ea(ea, bbs, import_eas, string_eas):
+        for target_ea, func_type, op, target_name in get_funcptr_ea(ea, import_eas, string_eas):
             if target_ea != ida_idaapi.BADADDR:
                 result[ea] = (target_ea, func_type, op, target_name)
                 if func_type in [FT_API]:
@@ -829,7 +860,7 @@ def get_children(bbs, import_eas, string_eas):
     vtbl = {}
     for bbea in bbs:
         bb = bbs[bbea]
-        get_calls_in_bb(bb, bbs, import_eas, string_eas, result=result, apicalls=apicalls, gvars=gvars, strings=strings, stroff=stroff, vtbl=vtbl)
+        get_calls_in_bb(bb, import_eas, string_eas, result=result, apicalls=apicalls, gvars=gvars, strings=strings, stroff=stroff, vtbl=vtbl)
     return result, apicalls, gvars, strings, stroff, vtbl
 
 def get_xrefs_from(ea):
