@@ -729,6 +729,7 @@ def get_stroff_ea(ea, import_eas):
     func_name = ""
     insn = ida_ua.insn_t()
     inslen = ida_ua.decode_insn(insn, ea)
+    i = -1
     for i in range(inslen):
         op = insn.ops[i]
         optype = op.type
@@ -807,21 +808,17 @@ def get_vtbl_methods(target_ea, vtbl):
             break
         ea = get_offset_fptr(target_ea)
         
-def get_calls_in_bb(bb, import_eas, string_eas, result=None, apicalls=None, gvars=None, strings=None, stroff=None, vtbl=None):
-    if result is None:
-        result = {}
-    if apicalls is None:
-        apicalls = {}
-    if gvars is None:
-        gvars = {}
-    if strings is None:
-        strings = {}
-    if stroff is None:
-        stroff = {}
-    if vtbl is None:
-        vtbl = {}
-    ea = bb.start_ea
-    while ea < bb.end_ea:
+def get_children(f, import_eas, string_eas):
+    result = {}
+    apicalls = {}
+    gvars = {}
+    strings = {}
+    stroff = {}
+    vtbl = {}
+    if f is None:
+        return result, apicalls, gvars, strings, stroff, vtbl
+    
+    for ea in f.code_items():
         for target_ea, func_type, op, target_name in get_funcptr_ea(ea, import_eas, string_eas):
             if target_ea != ida_idaapi.BADADDR:
                 result[ea] = (target_ea, func_type, op, target_name)
@@ -843,24 +840,11 @@ def get_calls_in_bb(bb, import_eas, string_eas, result=None, apicalls=None, gvar
                     pass
             #pass
         target_ea, func_type, op, target_name = get_stroff_ea(ea, import_eas)
-        if func_type in [FT_STO]:
+        if func_type in [FT_STO] and op >= 0:
             # I do not want to overwrite if ea is already in the result
             if ea not in result:
                 result[ea] = (target_ea, func_type, op, target_name)
             stroff[ea] = (target_ea, func_type, op, target_name)
-
-        ea = ida_search.find_code(ea, ida_search.SEARCH_DOWN|ida_search.SEARCH_NEXT)
-
-def get_children(bbs, import_eas, string_eas):
-    result = {}
-    apicalls = {}
-    gvars = {}
-    strings = {}
-    stroff = {}
-    vtbl = {}
-    for bbea in bbs:
-        bb = bbs[bbea]
-        get_calls_in_bb(bb, import_eas, string_eas, result=result, apicalls=apicalls, gvars=gvars, strings=strings, stroff=stroff, vtbl=vtbl)
     return result, apicalls, gvars, strings, stroff, vtbl
 
 def get_xrefs_from(ea):
@@ -1156,19 +1140,15 @@ def is_matched(text, regexes):
 def get_cmts_in_func(func_ea, regexes_rpt=None, regexes=None):
     result = {'cmt':{}, 'rcmt':{}}
     f = ida_funcs.get_func(func_ea)
-    flag = False
     if not f:
         rcmt = ida_bytes.get_cmt(func_ea, True)
         cmt = ida_bytes.get_cmt(func_ea, False)
         if cmt and is_matched(cmt, regexes):
             result['cmt'][func_ea] = cmt
-            flag = True
         if rcmt and not is_matched(rcmt, regexes_rpt):
             result['rcmt'][func_ea] = rcmt
-            flag = True
-        if flag:
-            return result
-    for ea in idautils.FuncItems(func_ea):
+        return result
+    for ea in f.code_items():
         rcmt = ida_bytes.get_cmt(ea, True)
         cmt = ida_bytes.get_cmt(ea, False)
         if cmt and is_matched(cmt, regexes):
@@ -1177,18 +1157,17 @@ def get_cmts_in_func(func_ea, regexes_rpt=None, regexes=None):
             result['rcmt'][ea] = rcmt
     return result
 
-def get_family_members(ea, bbs, import_eas=None, string_eas=None):
+def get_family_members(ea, f, import_eas=None, string_eas=None):
     if import_eas is None:
         import_eas = []
     if string_eas is None:
         string_eas = {}
     
-    func = ida_funcs.get_func(ea)
     target_ea = ea
-    if func is not None:
-        target_ea = func.start_ea
+    if f is not None:
+        target_ea = f.start_ea
     parents = get_xrefs(target_ea)
-    children, apicalls, gvars, strings, stroff, vtbl = get_children(bbs, import_eas, string_eas)
+    children, apicalls, gvars, strings, stroff, vtbl = get_children(f, import_eas, string_eas)
     return parents, children, apicalls, gvars, strings, stroff, vtbl
 
 def get_func_relation(f, import_eas=None, string_eas=None):
@@ -1196,9 +1175,9 @@ def get_func_relation(f, import_eas=None, string_eas=None):
         import_eas = []
     if string_eas is None:
         string_eas = {}
-    fc = ida_gdl.FlowChart(f)
-    bbs = get_bbs(fc)
-    parents, children, apicalls, gvars, strings, stroff, vtbl = get_family_members(f.start_ea, bbs, import_eas, string_eas)
+    #fc = ida_gdl.FlowChart(f)
+    #bbs = get_bbs(fc)
+    parents, children, apicalls, gvars, strings, stroff, vtbl = get_family_members(f.start_ea, f, import_eas, string_eas)
     func_type = get_func_type(f.start_ea, import_eas)
     yield f.start_ea, parents, children, func_type, gvars, strings, stroff, vtbl
     for ea in apicalls:
@@ -1856,10 +1835,10 @@ def main():
     import_eas = dict.fromkeys([x[1] for x in imports])
     string_eas = get_refed_strings()
     ea = idc.here()
-    f, bbs = get_func_bbs(ea)
+    #f, bbs = get_func_bbs(ea)
     if f:
         ea = f.start_ea
-    parents, children, apicalls, gvars, strings, stroff, vtbl = get_family_members(ea, bbs, import_eas, string_eas)
+    parents, children, apicalls, gvars, strings, stroff, vtbl = get_family_members(ea, f, import_eas, string_eas)
     print("Parents  :", [(hex(x).rstrip("L"), hex(parents[x][0]).rstrip("L")) for x in parents])
     print("Children :", [(hex(x).rstrip("L"), hex(children[x][0]).rstrip("L"), children[x][1], children[x][2], children[x][3]) for x in children])
     print("APIs     :", [(hex(x).rstrip("L"), apicalls[x]) for x in apicalls])
