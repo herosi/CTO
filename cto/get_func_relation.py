@@ -589,7 +589,7 @@ def get_funcptr_ea(ea, import_eas, string_eas):
                         func_type = get_func_type(target_ea, import_eas, func_type, offset=True)
                     yield target_ea, func_type, i, func_name
                 # call    dword_1003B3C8
-                elif is_call_insn(ea):
+                elif ida_idp.is_call_insn(insn):
                     if target_ea == ida_idaapi.BADADDR:
                         target_ea = v
                         if func_type == FT_UNK:
@@ -629,7 +629,7 @@ def get_funcptr_ea(ea, import_eas, string_eas):
                     # jmp     dword ptr ds:(CopyUnwindUp_0+4)[eax*4]
                     f = ida_funcs.get_func(ea)
                     vf = ida_funcs.get_func(v)
-                    if is_indirect_jump_insn(ea):
+                    if ida_idp.is_indirect_jump_insn(insn):
                         if f and vf and f.start_ea != vf.start_ea:
                             target_ea = v
                             func_name, func_type = get_str(ea, v, string_eas)
@@ -675,7 +675,7 @@ def get_funcptr_ea(ea, import_eas, string_eas):
                 yield target_ea, func_type, i, func_name
             """
             # unresolved indirect calls
-            elif is_call_insn(ea) or (is_indirect_jump_insn(ea) and not get_switch_info(ea)):
+            elif ida_idp.is_call_insn(insn) or (ida_idp.is_indirect_jump_insn(insn) and not get_switch_info(ea)):
                 func_type = FT_MEM
                 # if ea has an external xref set by a user manually, get it.
                 # however, it gets the first one only.
