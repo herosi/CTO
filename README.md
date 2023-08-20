@@ -10,6 +10,9 @@ CTO has another helper plugin named "CTO Function Lister", although it can work 
 An introduction video is here.  
 https://youtu.be/zVCpb82UfFs
 
+Check the article below about how to use CTO and CTO Function Lister in malware analysis tasks.
+https://www.iij.ad.jp/en/dev/iir/pdf/iir_vol59_focus1_EN.pdf
+
 You can also check the presentation at VB2021 localhost.  
 https://vblocalhost.com/conference/presentations/cto-call-tree-overviewer-yet-another-function-call-tree-viewer/
 
