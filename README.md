@@ -55,12 +55,13 @@ See "[INSTALL](/INSTALL)" file.
 ## How to Use
 To start CTO, press Alt+Shift+C.
 
-
 Double-click "..." symbol if you want to expand the path.
 If you want to create a graph based on a different target function, jump to the target function, click the CTO window, and press "F" key.
 See the help by pressing "H" key on the CTO window.
 
 To start CTO Function Lister, press Alt+Shift+F. See the help by pressing "H" key on the CTO Function Lister window as well.
+
+Check the articles [here](CTO (Call Tree Overviewer)) as well.
 
 ## Note
 CTO is still under development and it is unstable yet. I might change the data structure drastically.
