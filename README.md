@@ -61,7 +61,7 @@ See the help by pressing "H" key on the CTO window.
 
 To start CTO Function Lister, press Alt+Shift+F. See the help by pressing "H" key on the CTO Function Lister window as well.
 
-Check the articles [here](CTO (Call Tree Overviewer)) as well.
+Check the articles showed in the top of this file as well.
 
 ## Note
 CTO is still under development and it is unstable yet. I might change the data structure drastically.
