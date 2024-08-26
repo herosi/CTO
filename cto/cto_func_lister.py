@@ -1105,7 +1105,7 @@ class cto_func_lister_t(cto_base.cto_base, ida_kernwin.PluginForm):
                     else:
                         # change the name to modified name that the specific charasters are replaced
                         item.setText(name)
-                        # refresh other cto instanses
+                        # refresh other cto instances
                         self.refresh_all(ea)
                         refreshed = True
                 else:
