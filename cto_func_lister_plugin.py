@@ -122,8 +122,6 @@ class cto_func_lister_plugin_t(ida_idaapi.plugin_t):
             
         # update icon on menu
         act_icon_id = self.act_icon
-        # update icon on menu
-        act_icon_id = self.act_icon
         if self.g and self.g.config.dark_mode:
             act_icon_id = self.act_icon_dark
         ida_kernwin.update_action_icon(cto_func_lister_plugin_t.exec_from_toolbar.action_name, act_icon_id)

@@ -17,7 +17,12 @@ import ida_idp
 import ida_strlist
 import ida_segment
 import ida_entry
-import ida_struct
+try:
+    import ida_struct
+    get_struc_name = ida_struct.get_struc_name
+except ModuleNotFoundError:
+    get_struc_name = idc.get_struc_name
+    
 
 import inspect
 import os
@@ -982,7 +987,7 @@ def get_dref_belong_to_func(ea, vtbl_refs, dref_recursive=True, debug=False, dbg
                     if ida_bytes.is_code(flags):
                         if debug: dbg_print("!!!!!! data, code", hex(next_next_ea).rstrip("L"), hex(ida_idaapi.BADADDR).rstrip("L"), hex(next_ea).rstrip("L"))
                         yield next_next_ea, ida_idaapi.BADADDR, next_ea
-                    elif dref_recursive and not ida_struct.get_struc_name(next_next_ea):
+                    elif dref_recursive and not get_struc_name(next_next_ea):
                         if debug: dbg_print("!!!!!! data, data", hex(next_next_ea).rstrip("L"), hex(ida_idaapi.BADADDR).rstrip("L"), hex(next_ea).rstrip("L"))
                         yield next_ea, next_next_ea, ida_idaapi.BADADDR
                     else:
@@ -1041,7 +1046,7 @@ def get_dref_from_belong_to_func(ea, dref_recursive=True, debug=False, dbg_print
                     if ida_bytes.is_code(flags):
                         if debug: dbg_print("!!!!!! data, code", hex(next_next_ea).rstrip("L"), hex(ida_idaapi.BADADDR).rstrip("L"), hex(next_ea).rstrip("L"))
                         yield next_next_ea, ida_idaapi.BADADDR, next_ea
-                    elif dref_recursive and (not ida_struct.get_struc_name(next_next_ea) or ida_bytes.is_strlit(flags)):
+                    elif dref_recursive and (not get_struc_name(next_next_ea) or ida_bytes.is_strlit(flags)):
                         if debug: dbg_print("!!!!!! data, data", hex(next_ea).rstrip("L"), hex(next_next_ea).rstrip("L"), hex(ea).rstrip("L"))
                         if ida_bytes.is_code(ea_flags):
                             yield next_ea, next_next_ea, ea
@@ -1050,7 +1055,7 @@ def get_dref_from_belong_to_func(ea, dref_recursive=True, debug=False, dbg_print
                     else:
                         if debug: dbg_print("not yield data, data", "next_next_ea:", hex(next_next_ea).rstrip("L"), "next_ea:", hex(next_ea).rstrip("L"), "ea:", hex(ea).rstrip("L"))
             # next_drefs list is empty but need to yield for next_ea
-            if len(next_drefs) == 0 and (not ida_struct.get_struc_name(next_ea) or ida_bytes.is_strlit(flags)):
+            if len(next_drefs) == 0 and (not get_struc_name(next_ea) or ida_bytes.is_strlit(flags)):
                 if debug: dbg_print("!!!!!! data, not for next ea", "next_ea:", hex(next_ea).rstrip("L"), "ea:", hex(ea).rstrip("L"))
                 yield ea, next_ea, ida_idaapi.BADADDR
 
@@ -1305,7 +1310,7 @@ def drefs_wrapper(drefs, func_relations, direction, vtbl_refs, dref_recursive=Tr
             if debug: dbg_print("yield offset item", "ea:", hex(ea), "func_ea:", hex(func_ea), "dref_off_ea:", hex(dref_off_ea), "func_type:", func_type)
             yield (ea, func_ea, dref_off_ea, func_type)
         # struct member
-        elif func_ea != ea and func_ea != ida_idaapi.BADADDR and ea != ida_idaapi.BADADDR and ida_struct.get_struc_name(func_ea):
+        elif func_ea != ea and func_ea != ida_idaapi.BADADDR and ea != ida_idaapi.BADADDR and get_struc_name(func_ea):
             if func_type == FT_UNK:
                 func_type = FT_VAR
             if debug: dbg_print("yield struct member item", "ea:", hex(ea), "func_ea:", hex(func_ea), "dref_off_ea:", hex(dref_off_ea), "func_type:", func_type)
@@ -1345,7 +1350,7 @@ def get_drefs(func_ea, ea, direction, vtbl_refs, debug=False, dbg_print_func=Non
     return drefs
 
 def _append_result(result, next_ea, next_func_ea, next_func_type, dref_off_ea, direction, func_relations, append_exceeded=False):
-    if ida_struct.get_struc_name(dref_off_ea):
+    if get_struc_name(dref_off_ea):
         result.append((next_ea, next_func_ea, next_func_type))
     elif dref_off_ea != ida_idaapi.BADADDR and next_func_ea != ida_idaapi.BADADDR and dref_off_ea != next_func_ea:
         next_next_func_type = next_func_type
@@ -1384,7 +1389,7 @@ def append_result(result, next_ea, next_func_ea, next_func_type, dref_off_ea, di
 def _pop_result(result, next_ea, next_func_ea, next_func_type, dref_off_ea, direction, append_exceeded=False):
     result.pop(-1)
     if dref_off_ea != ida_idaapi.BADADDR and next_func_ea != ida_idaapi.BADADDR and dref_off_ea != next_func_ea:
-        if not ida_struct.get_struc_name(dref_off_ea):
+        if not get_struc_name(dref_off_ea):
             result.pop(-1)
     if append_exceeded:
         result.pop(-1)
@@ -1726,12 +1731,12 @@ def trace_func_calls(func_relations, ea, func_ea=ida_idaapi.BADADDR, target_ea=i
                             if len(next_drefs) == 0:
                                 if debug: dbg_print("***NOT*** append result:", "ea:", hex(next_ea).rstrip("L"), "func_ea:", hex(next_func_ea).rstrip("L"), func_type)
                                 # complete recursive tracing and yield result
-                                if direction == "children" and (not ida_struct.get_struc_name(next_func_ea) or func_type == FT_STR):
+                                if direction == "children" and (not get_struc_name(next_func_ea) or func_type == FT_STR):
                                     if debug: dbg_print("append result:", "ea:", hex(next_ea).rstrip("L"), "func_ea:", hex(next_func_ea).rstrip("L"), "dref_off_ea:", hex(dref_off_ea).rstrip("L"), func_type)
                                     result.append((next_ea, next_func_ea, func_type))
                                 if debug: dbg_print("yield result:", "ea:", hex(next_ea).rstrip("L"), "func_ea:", hex(next_func_ea).rstrip("L"), func_type)
                                 yield result
-                                if direction == "children" and (not ida_struct.get_struc_name(next_func_ea) or func_type == FT_STR):
+                                if direction == "children" and (not get_struc_name(next_func_ea) or func_type == FT_STR):
                                     result.pop(-1)
                                 recurse_flag = False
                             else:

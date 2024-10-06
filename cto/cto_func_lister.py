@@ -1690,7 +1690,11 @@ D: enable/disable Debug mode
             ida_kernwin.set_dock_pos(self.title, "Functions window", ida_kernwin.DP_TAB)
             
         # change the icon and colors
+        prev_dark_mode = self.config.dark_mode
+        self.config.dark_mode = self.is_dark_mode_with_main()
         self.change_widget_icon(bg_change=self.config.dark_mode)
+        if prev_dark_mode != self.config.dark_mode or self.config.dark_mode:
+            self.refresh()
         if self.config.dark_mode:
             self.tree.reset_btn_size()
             
