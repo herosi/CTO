@@ -77,6 +77,12 @@
         "rule": "#Signsrch ",
         "keywords": []
     },
+    "yara4ida": {
+        "regex": false,
+        "cs": false,
+        "rule": "#YARA: ",
+        "keywords": []
+    },
     "User defined tags": {
         "regex": false,
         "cs": true,
