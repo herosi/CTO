@@ -42,8 +42,11 @@ And use Python 3.x. It should work on Python 2.7 but I did not test enough and I
 - IDA_Signsrch  
   https://sourceforge.net/projects/idasignsrch/
 
-- SusanRTTI  
-  https://github.com/nccgroup/SusanRTTI
+- IDA_Signsrch  
+  https://sourceforge.net/projects/idasignsrch/
+
+- yara4ida  
+  https://github.com/kweatherman/yara4ida
 
 - Class Informer  
   https://sourceforge.net/projects/classinformer/  
