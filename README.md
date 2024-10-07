@@ -39,8 +39,8 @@ And use Python 3.x. It should work on Python 2.7 but I did not test enough and I
 - findguid.py  
   https://github.com/you0708/ida/tree/master/idapython_tools/findguid
 
-- IDA_Signsrch  
-  https://sourceforge.net/projects/idasignsrch/
+- SusanRTTI  
+  https://github.com/nccgroup/SusanRTTI
 
 - IDA_Signsrch  
   https://sourceforge.net/projects/idasignsrch/
