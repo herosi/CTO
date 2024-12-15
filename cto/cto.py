@@ -599,9 +599,15 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
             
         def generate_sub_graph(self, node_ea):
             parent = self.v()
-            if self.v().parent:
+                
+            if not parent:
+                ida_kernwin.msg("Creating subgraph was failed.%s" % (os.linesep))
+                return
+                
+            if parent and self.v().parent:
                 parent = self.v().parent
-            title = self.v().orig_title + "_%x" % node_ea
+            
+            title = parent.orig_title + "_%x" % node_ea
             
             flag = False
             for sg in self.v().sub_graphs:
