@@ -1986,7 +1986,7 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                     # I will skip adding additional trace points and updating relationships between those points if the next to ea of the exceeded node is not callee but caller.
                     skip_add_trace_points = True
             
-            # get the exact node id of the callee/caller node and push to to the additional trace points's queue
+            # get the exact node id of the callee/caller node and push to the additional trace points's queue
             if not skip_add_trace_points:
                 if next_ea not in self.trace_points_relations:
                     self.trace_points_relations[next_ea] = {"parents":set([]), "children":set([])}

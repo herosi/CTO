@@ -161,8 +161,18 @@ class cto_func_lister_plugin_t(ida_idaapi.plugin_t):
         if hasattr(sys.modules["__main__"], "g_cto_func_lister"):
             delattr(sys.modules["__main__"], "g_cto_func_lister")
 
+
+class RegisterIcon(ida_kernwin.UI_Hooks):
+
+    def updated_actions(self):
+        if ida_kernwin.update_action_icon(cto_func_lister_plugin_t.menu_path + cto_func_lister_plugin_t.wanted_name, cto_func_lister_plugin_t.act_icon_dark):
+            # unhook this if it's successful
+            self.unhook()
+
+
 def PLUGIN_ENTRY():
     return cto_func_lister_plugin_t()
+
 
 def main():
     global g_cto_func_lister
@@ -170,3 +180,6 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+ri = RegisterIcon()
+ri.hook()

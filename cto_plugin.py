@@ -83,7 +83,6 @@ class cto_plugin_t(ida_idaapi.plugin_t):
         # It might fail if the mode is darcula or similar themes
         # because the window color is the same as the default theme color.
         # However, it can still distinguish the default and the dark mode.
-        #if cto.CallTreeOverviewer.is_dark_mode_with_main():
         if cto_base.cto_base.is_dark_mode_with_main():
             ida_kernwin.update_action_icon(cto_plugin_t.exec_from_toolbar.action_name, self.act_icon_dark)
             ida_kernwin.update_action_icon(self.menu_path + self.wanted_name, self.act_icon_dark)
@@ -182,12 +181,27 @@ class cto_plugin_t(ida_idaapi.plugin_t):
         if hasattr(sys.modules["__main__"], "g_cto"):
             delattr(sys.modules["__main__"], "g_cto")
 
+
+class RegisterIcon(ida_kernwin.UI_Hooks):
+
+    def updated_actions(self):
+        if ida_kernwin.update_action_icon(cto_plugin_t.menu_path + cto_plugin_t.wanted_name, cto_plugin_t.act_icon_dark):
+            # unhook this if it's successful
+            self.unhook()
+
+
 def PLUGIN_ENTRY():
     return cto_plugin_t()
+
 
 def main():
     global g_cto
     g_cto = cto.exec_cto()
 
+
 if __name__ == '__main__':
     main()
+
+
+ri = RegisterIcon()
+ri.hook()

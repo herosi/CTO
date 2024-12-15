@@ -1128,7 +1128,7 @@ class cto_func_lister_t(cto_base.cto_base, ida_kernwin.PluginForm):
         # install CTO's finding path from/to node
         cto_inst = None
         for i in self.cto_data['insts']:
-            # here, I don't wny but type(i) and isinstance and i.__class__
+            # here, I don't know why but type(i) and isinstance and i.__class__
             # aren't match with the class. That's why compare these strings here.
             if str(type(i)) == "<class 'cto.CallTreeOverviewer'>":
                 if i.parent is None:
