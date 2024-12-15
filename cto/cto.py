@@ -608,7 +608,7 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                 if sg.title == title:
                     flag = True
                     break
-            if parent.start_ea == node_ea:
+            if parent.start_ea == node_ea and parent.title == title:
                 flag = True
             
             if flag:
@@ -4740,6 +4740,7 @@ _: print several important internal caches for debugging.
         return r
 
 def exec_cto(cto_data=None, curr_view=None, max_depth=1, debug=False):
+    cto = None
     if debug or ("g_debug" in globals() and g_debug):
         debug = True
     try:
