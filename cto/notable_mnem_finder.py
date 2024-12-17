@@ -145,7 +145,10 @@ class notable_mnem_t(object):
 def main():
     c = notable_mnem_t()
     for func_ea, ea, mnem_type, dst_ea in c.mnem_handlers():
-        print("%x %s: %x: %s, %x" % (func_ea, idc.get_name(func_ea), ea, mnem_type, dst_ea))
+        dst_ea_text = ""
+        if dst_ea != ida_idaapi.BADADDR:
+            dst_ea_text = ", %x" % dst_ea
+        ida_kernwin.msg("%x %s: %x: %s%s%s" % (func_ea, idc.get_name(func_ea), ea, mnem_type, dst_ea_text, os.linesep))
 
 if __name__ == "__main__":
     main()

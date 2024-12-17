@@ -699,7 +699,10 @@ class cto_base(debug_print.debug):
         ida_kernwin.msg("Checking notable mnemonics...%s" % (os.linesep))
         c = notable_mnem_finder.notable_mnem_t()
         for func_ea, ea, mnem_type, dst_ea in c.mnem_handlers():
-            ida_kernwin.msg("%x %s: %x: %s, %x%s" % (func_ea, idc.get_name(func_ea), ea, mnem_type, dst_ea, os.linesep))
+            dst_ea_text = ""
+            if dst_ea != ida_idaapi.BADADDR:
+                dst_ea_text = ", %x" % dst_ea
+            ida_kernwin.msg("%x %s: %x: %s%s%s" % (func_ea, idc.get_name(func_ea), ea, mnem_type, dst_ea_text, os.linesep))
         self.cache_cmt_update()
         self.refresh_all()
         
