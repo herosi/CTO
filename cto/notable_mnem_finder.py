@@ -91,7 +91,11 @@ class notable_mnem_t(object):
     
     def fstenv_handler(self, ea):
         #print("%x, %s" % (ea, idc.print_insn_mnem(ea)))
-        return "possible get pc", ea, v, idc.BADADDR
+        return "possible get pc", ea, idc.BADADDR
+        
+    def cpuid_handler(self, ea):
+        #print("%x, %s" % (ea, idc.print_insn_mnem(ea)))
+        return "possible get cpu information for vm detection", ea, idc.BADADDR
         
     
     def set_cmt(self, ea, comment):
@@ -122,6 +126,9 @@ class notable_mnem_t(object):
                 flag = True
             elif mnem in ["fnstenv", "fstenv", "fnsave", "fsave", "fxsave"]:
                 mnem_type, ea, dst_ea = self.fstenv_handler(ea)
+                flag = True
+            elif mnem == "cpuid":
+                mnem_type, ea, dst_ea = self.cpuid_handler(ea)
                 flag = True
                 
             if flag and ea != idc.BADADDR:

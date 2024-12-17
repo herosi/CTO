@@ -7,8 +7,7 @@
         "VC++ std:map<unk,unk> map node ctor (for 64-bit)": {"rule": "mov +word ptr \\[r.+\\+18h\\], 101h$", "regex":true},
         "VC++ std:map<unk,unk> map node ctor (for 32-bit)": {"rule": "mov +word ptr \\[e.+\\+0Ch\\], 101h$", "regex":true},
         "VC++ std:map<unk,unk> map node ctor (for 64-bit, old versions)": {"rule": "mov +word ptr \\[r.+\\+(?!18)[0-9A-F]+h\\], 101h$", "regex":true},
-        "VC++ std:map<unk,unk> map node ctor (for 32-bit, old versions)": {"rule": "mov +word ptr \\[e.+\\+(?!0C)[0-9A-F]+h\\], 101h$", "regex":true},
-        "cpuid": {"rule": "cpuid", "regex":false}
+        "VC++ std:map<unk,unk> map node ctor (for 32-bit, old versions)": {"rule": "mov +word ptr \\[e.+\\+(?!0C)[0-9A-F]+h\\], 101h$", "regex":true}
     },
     "multiple":{
     }
