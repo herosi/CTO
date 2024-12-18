@@ -77,8 +77,4 @@ PRs are welcome. Just complaining and a bug report without enough information ar
 
 ## Known Issues
 - Currently, CTO focuses on Intel x64/x86 architecture. If you want to extend other architectures, please send the PR to me.
-- CTO Function Lister will crash on IDA on Linux for some reasons while it works on Windows. But I can't fix it because I don't have that.
-```
-QSortFilterProxyModel: index from wrong model passed to mapToSource
-```
 - On IDA 7.6 including SP1, you will not be able to use ESC for looking backward location history on CTO’s window because of a bug of IDA. Instead, it will close the CTO window if you press it. It has been fixed on IDA 7.7 or later. Please use them.
