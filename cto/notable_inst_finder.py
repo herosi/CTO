@@ -16,13 +16,11 @@ class notable_inst_t(object):
         with open(frules) as f:
             insts = json.load(f)
         self.insts = {}
-        self.minsts = {}
         for rule_type in insts:
             if rule_type not in self.insts:
                 self.insts[rule_type] = {}
             for rule_name in insts[rule_type]:
                 self.insts[rule_type][rule_name] = insts[rule_type][rule_name]
-        #print(self.insts)
         self.cmt_prefix = cmt_prefix
         
     @staticmethod
