@@ -2,7 +2,7 @@
     "C++ vftables": {
         "regex": true,
         "cs": false,
-        "rule": "(vftables|`vftable'|vtable_)",
+        "rule": "(vftables|`vftable'|vtable_|_vtbl)",
         "keywords": ["children", "vftables"]
     },
     "C++ vftables (non-standard vftable)": {

@@ -15,6 +15,7 @@
         "Possible VC++ 7.0 (2002) to 9.0 (2008) for 32-bit basic_string<char>.c_str()": {"rules": [["mov +[re]..?, \\[[re][sb]p\\+.+\\]", 0], ["cmp +[re]..?, 10h", 2], ["jb +short ", 2]], "regex":true},
         "VC++ 7.0 (2002) to 9.0 (2008) for 64-bit basic_string<wchar_t>.c_str()": {"rules": [["mov +r..?, \\[r..?\\+20h\\]", 0], ["cmp r..?, 8(|\\s;.*)$", 2], ["jb +short ", 2]], "regex":true},
         "VC++ 7.0 (2002) to 9.0 (2008) for 32-bit basic_string<wchar_t>.c_str()": {"rules": [["mov +e..?, \\[\\[e[sb]p\\+.+\\]", 0], ["cmp e..?, 8(|\\s;.*)$", 2], ["jb +short ", 2]], "regex":true},
-        "VC++ 7.0 (2002) to 9.0 (2008) for 64-bit basic_string<wchar_t>.c_str()": {"rules": [["mov +[re]..?, \\[\\[[re][sb]p\\+.+\\]", 0], ["cmp [re]..?, 8(|\\s;.*)$", 2], ["jb +short ", 2]], "regex":true}
+        "VC++ 7.0 (2002) to 9.0 (2008) for 64-bit basic_string<wchar_t>.c_str()": {"rules": [["mov +[re]..?, \\[\\[[re][sb]p\\+.+\\]", 0], ["cmp [re]..?, 8(|\\s;.*)$", 2], ["jb +short ", 2]], "regex":true},
+        "VC++ ios_base.init()": {"rules": [["mov +dword ptr \\[[re].+\\], 201h", 0], ["mov +(qword ptr \\[r|dword ptr \\[e).+\\], 6(|\\s;.*)$", 2]], "regex":true}
     }
 }

@@ -23,10 +23,20 @@
         "0xEB": {"name": "jmp instruction (short)", "optype":[], "mnems":[], "opn":[], "opsz":[1]},
         "0xC3": {"name": "ret instruction", "optype":[], "mnems":[], "opn":[], "opsz":[1]},
         "0x8664": {"name": "IMAGE_FILE_MACHINE_AMD64", "optype":[], "mnems":[], "opn":[], "opsz":[]},
-        "0x555555555555555": {"name": "max list size for VC++ 2019 x64", "optype":[], "mnems":[], "opn":[], "opsz":[]},
+        "0x555555555555555": {"name": "max std::list size for VC++ 2019 x64", "optype":[], "mnems":[], "opn":[], "opsz":[]},
+        "0x7FFFFFF": {"name": "max std::list size for VC++ 2019 x86", "optype":[], "mnems":[], "opn":[], "opsz":[]},
+        "0x6E5478AC63FC8D5D": {"name": "max std::vector size for VC++ 2008 x64", "optype":[], "mnems":[], "opn":[], "opsz":[]},
+        "0x147AE147AE147": {"name": "max std::vector size for VC++ 2008 x64", "optype":[], "mnems":[], "opn":[], "opsz":[]},
+        "0x3FFFFFFFFFFFFFFF": {"name": "max std::vector size for VC++ 2019 x64", "optype":[], "mnems":[], "opn":[], "opsz":[]},
+        "0x3FFFFFFF": {"name": "max std::map/std::vector size for VC++ 2019 x86", "optype":[], "mnems":[], "opn":[], "opsz":[]},
+        "0x7FFFFFFE": {"name": "max std::string size for VC++ 2019 x86", "optype":[], "mnems":[], "opn":[], "opsz":[]},
+        "0xFFFFFFFFFFFFFFFE": {"name": "max std::string size for VC++ 2019 x64", "optype":[], "mnems":[], "opn":[], "opsz":[]},
+        "0x2AAAAAAAAAAAAAA": {"name": "max std::map size for VC++ 2019 x64", "optype":[], "mnems":[], "opn":[], "opsz":[]},
+        "0x492492492492491": {"name": "max std::map size for VC++ 2015 or later x64", "optype":[], "mnems":[], "opn":[], "opsz":[]},
+        "0x5F417D05F417CF": {"name": "max std::map size for VC++ 2015 or later x64", "optype":[], "mnems":[], "opn":[], "opsz":[]},
         "0x83828180": {"name": "LZO_UINT32_C_LE", "optype":[], "mnems":[], "opn":[], "opsz":[]},
         "0x80818283": {"name": "LZO_UINT32_C_BE", "optype":[], "mnems":[], "opn":[], "opsz":[]},
-		"0x1824429d": {"name": "LZO_Compress", "optype":[], "mnems":[], "opn":[], "opsz":[]}
+        "0x1824429d": {"name": "LZO_Compress", "optype":[], "mnems":[], "opn":[], "opsz":[]}
     },
     "multiple":{
         "PE Sec": {
