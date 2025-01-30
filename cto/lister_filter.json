@@ -29,25 +29,25 @@
         "rule": "operator new(\\[\\])?\\(",
         "keywords": ["children"]
     },
-    "xor instruction in a loop": {
+    "xor instructions in a loop": {
         "regex": false,
         "cs": false,
         "rule": "CTO-xorloop",
         "keywords": ["cmt"]
     },
-    "notable const value": {
+    "notable const values": {
         "regex": false,
         "cs": false,
         "rule": "NT_CON: ",
         "keywords": ["cmt"]
     },
-    "notable instruction": {
+    "notable instructions": {
         "regex": false,
         "cs": false,
         "rule": "NT_INST: ",
         "keywords": ["cmt"]
     },
-    "notable mnem": {
+    "notable mnems": {
         "regex": false,
         "cs": false,
         "rule": "NT_MNEM: ",
