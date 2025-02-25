@@ -149,6 +149,25 @@ def is_ea_in_func(target_ea, bbs):
             return True
     return False
 
+# for IDA 7.x
+def get_code_items_with_fii(func):
+    if not func:
+        return
+    fii = ida_funcs.func_item_iterator_t()
+    ok = fii.set(func)
+    while ok:
+        yield fii.current()
+        ok = fii.next_code()
+
+def get_code_items(f):
+    try:
+        code_items = f.code_items()
+    except AttributeError:
+        code_items = get_code_items_with_fii(f)
+    
+    for ea in code_items:
+        yield ea
+
 FT_UNK = 0    # unknown
 FT_GEN = 1    # for general internal calls
 FT_LIB = 2    # for static linked libraries
@@ -823,7 +842,7 @@ def get_children(f, import_eas, string_eas):
     if f is None:
         return result, apicalls, gvars, strings, stroff, vtbl
     
-    for ea in f.code_items():
+    for ea in get_code_items(f):
         for target_ea, func_type, op, target_name in get_funcptr_ea(ea, import_eas, string_eas):
             if target_ea != ida_idaapi.BADADDR:
                 result[ea] = (target_ea, func_type, op, target_name)
@@ -1153,7 +1172,7 @@ def get_cmts_in_func(func_ea, regexes_rpt=None, regexes=None):
         if rcmt and not is_matched(rcmt, regexes_rpt):
             result['rcmt'][func_ea] = rcmt
         return result
-    for ea in f.code_items():
+    for ea in get_code_items(f):
         rcmt = ida_bytes.get_cmt(ea, True)
         cmt = ida_bytes.get_cmt(ea, False)
         if cmt and is_matched(cmt, regexes):
