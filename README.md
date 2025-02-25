@@ -23,11 +23,10 @@ Presentation slides
 https://vblocalhost.com/uploads/2021/09/VB2021-14.pdf
 
 ## Requirements
-- IDA Pro 7.4 or later (I tested on 7.5 SP3 to 7.7, 8.2 SP1, 8.4 SP2 and 9.0)
+- IDA Pro 8.0 or later (I tested on 8.0, 8.2 SP1, 8.4 SP2, and 9.0, and 9.0 SP1)
 - Python 3.x (I tested on Python 3.8 to 3.12)
 
-You will need at least IDA Pro 7.4 or later because of the APIs that I use.
-And use Python 3.x. It should work on Python 2.7 but I did not test enough and I do not support it because it has already obsoleted and deprecated.
+You will need at least IDA Pro 8.0 or later because of the APIs that I use.
 
 ## Optional 3rd Party Software
 - ironstrings  
