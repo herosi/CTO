@@ -23,7 +23,7 @@ Presentation slides
 https://vblocalhost.com/uploads/2021/09/VB2021-14.pdf
 
 ## Requirements
-- IDA Pro 8.0 or later (I tested on 8.0, 8.2 SP1, 8.4 SP2, and 9.0, and 9.0 SP1)
+- IDA Pro 8.0 or later (I tested on 8.0, 8.2 SP1, 8.4 SP2, 9.0, and 9.0 SP1)
 - Python 3.x (I tested on Python 3.8 to 3.12)
 
 You will need at least IDA Pro 8.0 or later because of the APIs that I use.
