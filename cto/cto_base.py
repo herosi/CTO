@@ -40,6 +40,7 @@ ida_idaapi.require("xor_loop_detector")
 ida_idaapi.require("notable_mnem_finder")
 ida_idaapi.require("notable_const_finder")
 ida_idaapi.require("notable_inst_finder")
+ida_idaapi.require("qtutils")
 
 FT_UNK = get_func_relation.FT_UNK
 FT_GEN = get_func_relation.FT_GEN
@@ -729,77 +730,13 @@ class cto_base(debug_print.debug):
             w = self.GetWidget()
         return self.icon.change_widget_icon(w, icon_data, bg_change, title=self.title)
         
-    @staticmethod
-    def get_main_window():
-        try:
-            from PyQt5 import QtWidgets
-        except ImportError:
-            return None
-        
-        widget = QtWidgets.QApplication.activeWindow()
-        QtWidgets.QApplication.focusWidget()
-        for widget in [QtWidgets.QApplication.activeWindow(), QtWidgets.QApplication.focusWidget()] + QtWidgets.QApplication.topLevelWidgets():
-            while widget:
-                if isinstance(widget, QtWidgets.QMainWindow):
-                    break
-                widget = widget.parent()
-            if isinstance(widget, QtWidgets.QMainWindow):
-                return widget
-        return None
-    
-    @staticmethod
-    def _is_dark_mode(bgcolor, threshold=128):
-        if bgcolor >= 0:
-            alpha = bgcolor >> 24
-            bgcolor &= 0xffffff
-            green = bgcolor >> 16
-            blue = (bgcolor >> 8) & 0xff
-            red = bgcolor & 0xff
-            #print("%x, %x, %x, %x, %x" % (bgcolor, green, blue, red, alpha))
-            if green < threshold and blue < threshold and red < threshold:
-                return True
-        return False
-    
     def is_dark_mode(self, w=None):
-        return is_dark_mode_with_main()
+        return qtutils.dark_mode_checker_t.is_dark_mode()
     
     @staticmethod
     def is_dark_mode_with_main():
-        try:
-            from PyQt5 import QtWidgets
-        except ImportError:
-            return False
-
-        widget = cto_base.get_main_window()
-        if not isinstance(widget, QtWidgets.QMainWindow):
-            return False
-        bgcolor = cto_base.get_bgcolor(x=0, y=0, w=widget)
-        if bgcolor < 0:
-            return False
-        return cto_base._is_dark_mode(bgcolor)
-        
-    @staticmethod
-    def get_bgcolor(x=0, y=0, w=None):
-        bgcolor = -1
-        if w is None:
-            return bgcolor
-        
-        try:
-            import sip
-            from PyQt5 import QtCore
-            from PyQt5 import QtWidgets
-            from PyQt5 import QtGui
-        except ImportError:
-            return bgcolor
-        
-        if str(w).startswith("<Swig Object of type 'TWidget *' at") and str(type(w)) in ["<class 'SwigPyObject'>", "<type 'SwigPyObject'>"]: # type: for py2, class: for py3
-            widget = sip.wrapinstance(int(w), QtWidgets.QWidget)
-        else:
-            widget = w
-            
-        pixmap = widget.grab(QtCore.QRect(x, y, x+1, y+1))
-        image = QtGui.QImage(pixmap.toImage())
-        bgcolor = image.pixel(0, 0)
-        
-        return bgcolor
-        
+        return qtutils.dark_mode_checker_t.is_dark_mode_with_main()
+    
+    def _is_dark_mode(self, bgcolor):
+        return qtutils.dark_mode_checker_t._is_dark_mode(bgcolor)
+    

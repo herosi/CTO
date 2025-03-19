@@ -100,3 +100,82 @@ class enable_toolbar_t(ida_kernwin.UI_Hooks):
         
     def __del__(self):
         self.unhook()
+
+
+class dark_mode_checker_t(object):
+    
+    @staticmethod
+    def is_dark_mode():
+        return dark_mode_checker_t.is_dark_mode_with_main()
+    
+    @staticmethod
+    def get_main_window():
+        try:
+            from PyQt5 import QtWidgets
+        except ImportError:
+            return None
+        
+        widget = QtWidgets.QApplication.activeWindow()
+        QtWidgets.QApplication.focusWidget()
+        for widget in [QtWidgets.QApplication.activeWindow(), QtWidgets.QApplication.focusWidget()] + QtWidgets.QApplication.topLevelWidgets():
+            while widget:
+                if isinstance(widget, QtWidgets.QMainWindow):
+                    break
+                widget = widget.parent()
+            if isinstance(widget, QtWidgets.QMainWindow):
+                return widget
+        return None
+    
+    @staticmethod
+    def _is_dark_mode(bgcolor, threshold=128):
+        if bgcolor >= 0:
+            alpha = bgcolor >> 24
+            bgcolor &= 0xffffff
+            green = bgcolor >> 16
+            blue = (bgcolor >> 8) & 0xff
+            red = bgcolor & 0xff
+            #print("%x, %x, %x, %x, %x" % (bgcolor, green, blue, red, alpha))
+            if green < threshold and blue < threshold and red < threshold:
+                return True
+        return False
+    
+    @staticmethod
+    def is_dark_mode_with_main():
+        try:
+            from PyQt5 import QtWidgets
+        except ImportError:
+            return False
+
+        widget = dark_mode_checker_t.get_main_window()
+        if not isinstance(widget, QtWidgets.QMainWindow):
+            return False
+        bgcolor = dark_mode_checker_t.get_bgcolor(x=0, y=0, w=widget)
+        if bgcolor < 0:
+            return False
+        return dark_mode_checker_t._is_dark_mode(bgcolor)
+        
+    @staticmethod
+    def get_bgcolor(x=0, y=0, w=None):
+        bgcolor = -1
+        if w is None:
+            return bgcolor
+        
+        try:
+            import sip
+            from PyQt5 import QtCore
+            from PyQt5 import QtWidgets
+            from PyQt5 import QtGui
+        except ImportError:
+            return bgcolor
+        
+        if str(w).startswith("<Swig Object of type 'TWidget *' at") and str(type(w)) in ["<class 'SwigPyObject'>", "<type 'SwigPyObject'>"]: # type: for py2, class: for py3
+            widget = sip.wrapinstance(int(w), QtWidgets.QWidget)
+        else:
+            widget = w
+            
+        pixmap = widget.grab(QtCore.QRect(x, y, x+1, y+1))
+        image = QtGui.QImage(pixmap.toImage())
+        bgcolor = image.pixel(0, 0)
+        
+        return bgcolor
+        
