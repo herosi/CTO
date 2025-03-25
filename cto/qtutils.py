@@ -1,5 +1,9 @@
 import ida_kernwin
 
+try:
+    ModuleNotFoundError
+except NameError:
+    ModuleNotFoundError = ImportError
 
 def can_use_qt():
     try:
@@ -7,7 +11,7 @@ def can_use_qt():
         from PyQt5 import QtCore
         from PyQt5 import QtWidgets
         from PyQt5 import QtGui
-    except ImportError:
+    except ModuleNotFoundError:
         return False
     return True
     
@@ -112,7 +116,7 @@ class dark_mode_checker_t(object):
     def get_main_window():
         try:
             from PyQt5 import QtWidgets
-        except ImportError:
+        except ModuleNotFoundError:
             return None
         
         widget = QtWidgets.QApplication.activeWindow()
@@ -143,7 +147,7 @@ class dark_mode_checker_t(object):
     def is_dark_mode_with_main():
         try:
             from PyQt5 import QtWidgets
-        except ImportError:
+        except ModuleNotFoundError:
             return False
 
         widget = dark_mode_checker_t.get_main_window()
@@ -165,7 +169,7 @@ class dark_mode_checker_t(object):
             from PyQt5 import QtCore
             from PyQt5 import QtWidgets
             from PyQt5 import QtGui
-        except ImportError:
+        except ModuleNotFoundError:
             return bgcolor
         
         if str(w).startswith("<Swig Object of type 'TWidget *' at") and str(type(w)) in ["<class 'SwigPyObject'>", "<type 'SwigPyObject'>"]: # type: for py2, class: for py3
