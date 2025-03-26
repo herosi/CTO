@@ -1,8 +1,10 @@
 import ida_kernwin
+import ida_idaapi
 
 import codecs
 
-import qtutils
+ida_idaapi.require("cto")
+ida_idaapi.require("cto.qtutils")
 
 g_icon_data_ascii = (
     b"89504E470D0A1A0A0000000D4948445200000020000000200806000000737A7A",
@@ -107,7 +109,7 @@ class icon_handler(object):
         if pixmap:
             icon = QtGui.QIcon(pixmap)
             
-            widget = qtutils.get_widget(w, title=title)
+            widget = cto.qtutils.get_widget(w, title=title)
             if widget is None:
                 return False
             widget.setWindowIcon(icon)

@@ -9,9 +9,6 @@ import ida_idaapi
 import ida_gdl
 import idautils
 
-#import cto_utils
-#ida_idaapi.require("cto_utils")
-
 class comment_t(object):
     def __init__(self, frules=os.path.join(os.path.dirname(__file__),"cmt_rules.json")):
         with open(frules) as f:

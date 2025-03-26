@@ -10,10 +10,8 @@ import ida_segment
 import os
 import json
 
-import cto_utils
-ida_idaapi.require("cto_utils")
-#import segments
-#ida_idaapi.require("segments")
+ida_idaapi.require("cto")
+ida_idaapi.require("cto.cto_utils")
 
 def get_op_size(dtyp):
     if dtyp == ida_ua.dt_dword:
@@ -107,7 +105,7 @@ class notable_const_t(object):
             dtype = op.dtype
             opsz = get_op_size(dtype)
             v = idc.get_operand_value(ea, i)
-            if cto_utils.is_32bit(ea):
+            if cto.cto_utils.is_32bit(ea):
                 v &= 0xffffffff
                 #print(hex(v))
             flags = ida_bytes.get_full_flags(v)

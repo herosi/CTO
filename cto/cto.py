@@ -23,30 +23,25 @@ import time
 import copy
 
 # import internal libraries
-import get_func_relation
-import tinfo
-import cto_base
-import icon
-import syncui
-import cto_utils
-ida_idaapi.require("get_func_relation")
-ida_idaapi.require("tinfo")
-ida_idaapi.require("cto_base")
-ida_idaapi.require("icon")
-ida_idaapi.require("syncui")
-ida_idaapi.require("cto_utils")
+ida_idaapi.require("cto")
+ida_idaapi.require("cto.get_func_relation")
+ida_idaapi.require("cto.tinfo")
+ida_idaapi.require("cto.cto_base")
+ida_idaapi.require("cto.icon")
+ida_idaapi.require("cto.syncui")
+ida_idaapi.require("cto.cto_utils")
 
 g_max_recursive = 10
 
-FT_UNK = get_func_relation.FT_UNK
-FT_GEN = get_func_relation.FT_GEN
-FT_LIB = get_func_relation.FT_LIB
-FT_API = get_func_relation.FT_API
-FT_MEM = get_func_relation.FT_MEM
-FT_VAR = get_func_relation.FT_VAR
-FT_STR = get_func_relation.FT_STR
-FT_STO = get_func_relation.FT_STO
-FT_VTB = get_func_relation.FT_VTB
+FT_UNK = cto.get_func_relation.FT_UNK
+FT_GEN = cto.get_func_relation.FT_GEN
+FT_LIB = cto.get_func_relation.FT_LIB
+FT_API = cto.get_func_relation.FT_API
+FT_MEM = cto.get_func_relation.FT_MEM
+FT_VAR = cto.get_func_relation.FT_VAR
+FT_STR = cto.get_func_relation.FT_STR
+FT_STO = cto.get_func_relation.FT_STO
+FT_VTB = cto.get_func_relation.FT_VTB
 
 if not hasattr(ida_kernwin, "WOPN_NOT_CLOSED_BY_ESC"):
     setattr(ida_kernwin, "WOPN_NOT_CLOSED_BY_ESC", 0x100) # 7.5 lacks the definition
@@ -58,7 +53,7 @@ if not hasattr(ida_kernwin, "CVNF_JUMP"):
 if not hasattr(ida_kernwin, "CVNF_ACT"):
     setattr(ida_kernwin, "CVNF_ACT", 0x4) # 7.5 lacks the definition
 
-class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
+class CallTreeOverviewer(cto.cto_base.cto_base, ida_graph.GraphViewer):
     orig_title = "CTO"
     DO_NOT_SKIP = 0
     SKIP_CHILDREN = 1
@@ -91,7 +86,7 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
         if not skip_lib:
             self.skip_lib = False
         
-        self.icon = icon.icon_handler(icon_data=icon.g_icon_data_ascii, hexify=True)
+        self.icon = cto.icon.icon_handler(icon_data=cto.icon.g_icon_data_ascii, hexify=True)
         self.icon_id = 0
         
         # basic config
@@ -105,7 +100,7 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
         self.sub_graphs = []
         
         # init cto base
-        cto_base.cto_base.__init__(self, cto_data, curr_view, debug)
+        cto.cto_base.cto_base.__init__(self, cto_data, curr_view, debug)
         
         # jump to start ea
         #self.jumpto(self.start_ea)
@@ -135,7 +130,7 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
         # Temoprary classes for UI and view hooks.
         # Their classes are only available in init function to avoid to forget unhooking and deleting.
         # Their instances are available while CallTreeOverviewer instance is available because they are generated at the end of init function below.
-        class my_ui_hooks_t(syncui.my_ui_hooks_t):
+        class my_ui_hooks_t(cto.syncui.my_ui_hooks_t):
             def _log(self, *msg):
                 if self.v().config.debug:
                     self.v().dbg_print(">>> MyUiHook: %s" % " ".join([str(x) for x in msg]))
@@ -200,7 +195,7 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
                         ida_kernwin.attach_action_to_popup(my_w, popup_handle, actname)
                     
         # observing "IDA View-A" window
-        class my_view_hooks_t(syncui.my_view_hooks_t):
+        class my_view_hooks_t(cto.syncui.my_view_hooks_t):
             def _log(self, *msg):
                 if self.v().config.debug:
                     self.v().dbg_print(">>> MyViewHook: %s" % " ".join([str(x) for x in msg]))
@@ -892,9 +887,9 @@ class CallTreeOverviewer(cto_base.cto_base, ida_graph.GraphViewer):
             self.to_be_saved_ea = ea
             
         # check if it can reload or not.
-        #drefs = list(get_func_relation.get_drefs_to(self.start_ea))
+        #drefs = list(cto.get_func_relation.get_drefs_to(self.start_ea))
         #if self.start_ea not in self.func_relations and len(drefs) == 0:
-        drefs = list(get_func_relation.get_drefs_to(ea))
+        drefs = list(cto.get_func_relation.get_drefs_to(ea))
         if ea not in self.func_relations and len(drefs) == 0:
             ida_kernwin.msg("Must be in a function" + os.linesep)
             return False
@@ -3172,7 +3167,7 @@ _: print several important internal caches for debugging.
         if ida_bytes.is_strlit(flags):
             # get string content by ea
             self.dbg_print("%x is a strlit" % ea)
-            str_contents = cto_utils.get_str_content_by_ea(ea)
+            str_contents = cto.cto_utils.get_str_content_by_ea(ea)
             str_ea = ea
             to_be_checked = ea
             if str_contents is None and func_ea in self.func_relations:
@@ -3308,8 +3303,8 @@ _: print several important internal caches for debugging.
     def trace_paths_append_cache(self, start_ea, end_ea, fn_keys, cache, max_recursive=g_max_recursive, direction="parents", result=None):
         found_flag = False
         self.dbg_print("trace the call tree", hex(start_ea).rstrip("L"), hex(end_ea).rstrip("L"), direction, max_recursive, [hex(x).rstrip("L") for x in fn_keys], self.skip_api, self.skip_lib)
-        for r in get_func_relation.trace_func_calls(self.func_relations, ea=start_ea, target_ea=end_ea, direction=direction, vtbl_refs=self.vtbl_refs, max_recursive=max_recursive, filtered_nodes=self.filtered_nodes, skip_api=self.skip_api, skip_lib=self.skip_lib, debug=self.config.debug, dbg_print_func=self.dbg_print, result=result):
-        #for r in get_func_relation.trace_nodes(self.func_relations, start_ea=start_ea, target_ea=end_ea, direction=direction, vtbl_refs=self.vtbl_refs, max_recursive=max_recursive, filtered_nodes=self.filtered_nodes, skip_api=self.skip_api, skip_lib=self.skip_lib, debug=self.config.debug, dbg_print_func=self.dbg_print, result=result):
+        for r in cto.get_func_relation.trace_func_calls(self.func_relations, ea=start_ea, target_ea=end_ea, direction=direction, vtbl_refs=self.vtbl_refs, max_recursive=max_recursive, filtered_nodes=self.filtered_nodes, skip_api=self.skip_api, skip_lib=self.skip_lib, debug=self.config.debug, dbg_print_func=self.dbg_print, result=result):
+        #for r in cto.get_func_relation.trace_nodes(self.func_relations, start_ea=start_ea, target_ea=end_ea, direction=direction, vtbl_refs=self.vtbl_refs, max_recursive=max_recursive, filtered_nodes=self.filtered_nodes, skip_api=self.skip_api, skip_lib=self.skip_lib, debug=self.config.debug, dbg_print_func=self.dbg_print, result=result):
             yield r
             found_flag = True
             if (start_ea, end_ea, direction, max_recursive, fn_keys, self.skip_api, self.skip_lib) in cache:
@@ -3358,9 +3353,9 @@ _: print several important internal caches for debugging.
         if start_ea in self.func_relations:
             return
         if direction == "parents":
-            drefs = get_func_relation.get_dref_belong_to_func(start_ea, self.vtbl_refs)
+            drefs = cto.get_func_relation.get_dref_belong_to_func(start_ea, self.vtbl_refs)
         else:
-            drefs = get_func_relation.get_dref_from_belong_to_func(start_ea)
+            drefs = cto.get_func_relation.get_dref_from_belong_to_func(start_ea)
         for dref_ea, dref_func_ea, dref_off_ea in drefs:
             func_type = FT_VAR
             if dref_func_ea in self.func_relations and dref_ea in self.func_relations[dref_func_ea]["strings"]:
@@ -3439,7 +3434,7 @@ _: print several important internal caches for debugging.
             # for strings and global variables
             else:
                 func_type = FT_VAR
-                for dref_ea, dref_func_ea, dref_off_ea in get_func_relation.get_dref_belong_to_func(start_ea, self.vtbl_refs):
+                for dref_ea, dref_func_ea, dref_off_ea in cto.get_func_relation.get_dref_belong_to_func(start_ea, self.vtbl_refs):
                     dref_flag, func_type = self.dref_data_type(dref_ea, dref_func_ea, dref_off_ea)
                     if dref_flag:
                         break
@@ -3450,7 +3445,7 @@ _: print several important internal caches for debugging.
             nid = self.get_node_id(start_ea, start_ea, caller=False)
             if start_ea not in self.func_relations:
                 func_type = FT_VAR
-                for dref_ea, dref_func_ea, dref_off_ea in get_func_relation.get_dref_belong_to_func(start_ea, self.vtbl_refs):
+                for dref_ea, dref_func_ea, dref_off_ea in cto.get_func_relation.get_dref_belong_to_func(start_ea, self.vtbl_refs):
                     dref_flag, func_type = self.dref_data_type(dref_ea, dref_func_ea, dref_off_ea)
                     if dref_flag:
                         break
@@ -3980,7 +3975,7 @@ _: print several important internal caches for debugging.
             # for strings and global variables
             else:
                 func_type = FT_VAR
-                for dref_ea, dref_func_ea, dref_off_ea in get_func_relation.get_dref_from_belong_to_func(start_ea):
+                for dref_ea, dref_func_ea, dref_off_ea in cto.get_func_relation.get_dref_from_belong_to_func(start_ea):
                     dref_flag, func_type = self.dref_data_type(dref_ea, dref_func_ea, dref_off_ea)
                     if dref_flag:
                         break
@@ -3992,7 +3987,7 @@ _: print several important internal caches for debugging.
             nid = self.get_node_id(start_ea, start_ea, caller=False)
             if start_ea not in self.func_relations:
                 func_type = FT_VAR
-                for dref_ea, dref_func_ea, dref_off_ea in get_func_relation.get_dref_from_belong_to_func(start_ea):
+                for dref_ea, dref_func_ea, dref_off_ea in cto.get_func_relation.get_dref_from_belong_to_func(start_ea):
                     dref_flag, func_type = self.dref_data_type(dref_ea, dref_func_ea, dref_off_ea)
                     if dref_flag:
                         break
@@ -4512,9 +4507,9 @@ _: print several important internal caches for debugging.
                                         break
                                 if not found_flag:
                                     callee_id = self.add_node(ida_idaapi.BADADDR, self.color_callee_str(func_name, func_type), self.get_color(func_type), start_ea, func_type=func_type, caller=False, node_type="Dynamic Call")
-                                    tif = tinfo.get_tinfo_by_name(func_name)
+                                    tif = cto.tinfo.get_tinfo_by_name(func_name)
                                     if tif:
-                                        tinfo.apply_tinfo_to_ea(tif, caller, opn)
+                                        cto.tinfo.apply_tinfo_to_ea(tif, caller, opn)
                                 prev_callee_id = self.nodes[prev_callee]
                                 self.add_edge(prev_callee_id, callee_id)
                     
@@ -4535,7 +4530,7 @@ _: print several important internal caches for debugging.
                             func_type = FT_UNK
                             opn = -1
                             func_name = ""
-                            for dref_ea, dref_func_ea, dref_off_ea in get_func_relation.get_dref_from_belong_to_func(prev_callee):
+                            for dref_ea, dref_func_ea, dref_off_ea in cto.get_func_relation.get_dref_from_belong_to_func(prev_callee):
                                 if dref_ea in self.func_relations[dref_func_ea]["strings"]:
                                     _, func_type, opn, func_name = self.func_relations[dref_func_ea]["strings"][dref_ea]
                                     break
@@ -4551,9 +4546,9 @@ _: print several important internal caches for debugging.
                                     break
                             if not found_flag:
                                 callee_id = self.add_node(ida_idaapi.BADADDR, self.color_callee_str(func_name, func_type), self.get_color(func_type), start_ea, func_type=func_type, caller=False, node_type="Dynamic Call")
-                                tif = tinfo.get_tinfo_by_name(func_name)
+                                tif = cto.tinfo.get_tinfo_by_name(func_name)
                                 if tif:
-                                    tinfo.apply_tinfo_to_ea(tif, caller, opn)
+                                    cto.tinfo.apply_tinfo_to_ea(tif, caller, opn)
                             caller_id = self.nodes[caller]
                             self.add_edge(caller_id, callee_id)
                 
@@ -4660,7 +4655,7 @@ _: print several important internal caches for debugging.
             ida_graph.viewer_set_gli(w, w_gli, ida_graph.GLICTL_CENTER)
             
     def show_graph(self, zoom=1):
-        drefs = list(get_func_relation.get_drefs_to(self.start_ea))
+        drefs = list(cto.get_func_relation.get_drefs_to(self.start_ea))
         if self.start_ea not in self.func_relations and len(drefs) == 0 and self.start_ea not in self.vtbl_refs:
             ida_kernwin.msg("Must be in a function" + os.linesep)
             return False

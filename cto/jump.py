@@ -8,9 +8,6 @@ import ida_idaapi
 import ida_xref
 import idc
 
-#import cto_utils
-#ida_idaapi.require("cto_utils")
-
 def jump_to_func_ptr_line_pos(text, func_name, w, tweak=0, add_x=False):
     flag = False
     idx = text.find(func_name)
@@ -38,30 +35,6 @@ def jump_to_func_ptr_line_pos(text, func_name, w, tweak=0, add_x=False):
         flag = True
     return flag
 
-"""
-def get_apiname_line(ea, wname=g_wname):
-    fn = idc.get_name(ea)
-    if not fn:
-        return None, None
-
-    fn, line, idx = get_funcname_line(ea)
-    if not fn:
-        return None, None
-        
-    w = find_widget(wname)
-    if w is None:
-        return None, None
-    pos, x, y = ida_kernwin.get_custom_viewer_place(w, 0)
-    ida_kernwin.jumpto(w, pos, 0, y)
-        
-    l = ida_kernwin.get_curline()
-    if l and l.find(fn) >= 0:
-        l_removed = ida_lines.tag_remove(l)
-        return fn, l_removed
-        
-    return None, None
-"""
-
 def jump_to_line(ea, i, w):
     #w = find_widget(wname)
     if w is None:
@@ -70,23 +43,6 @@ def jump_to_line(ea, i, w):
     pos.lnnum = i
     ida_kernwin.jumpto(w, pos, x, y)
     return True
-
-"""
-def check_line(ea, i, fn, wname=g_wname):
-    w = find_widget(wname)
-    if w is None:
-        return None, -1
-    pos, x, y = ida_kernwin.get_custom_viewer_place(w, 0)
-    pos.lnnum = i
-    ida_kernwin.jumpto(w, pos, x, y)
-    l = ida_kernwin.get_curline()
-    l_removed = ida_lines.tag_remove(l)
-    l_removed_content = l_removed.split(";")[0]
-    idx = l_removed_content.find(fn)
-    if idx >= 0:
-        return l_removed_content, idx
-    return None, -1
-"""
 
 def get_line_no_decomp(text, vu, max_trial=200):
     line = ""

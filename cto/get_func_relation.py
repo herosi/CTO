@@ -33,10 +33,9 @@ import cProfile
 import pstats
 import io
 
-import tinfo
-import jump
-ida_idaapi.require("tinfo")
-ida_idaapi.require("jump")
+ida_idaapi.require("cto")
+ida_idaapi.require("cto.tinfo")
+ida_idaapi.require("cto.jump")
 
 g_max_recursive = 100
 if "g_debug" not in globals():
@@ -216,7 +215,7 @@ def get_func_type(func_ea, import_eas=None, func_type=FT_UNK, offset=False):
         if not fn:
             fn = ida_name.get_name(func_ea)
     
-        if fn and tinfo.get_tinfo_by_name(fn):
+        if fn and cto.tinfo.get_tinfo_by_name(fn):
             func_type = FT_API
     
     return func_type
@@ -225,15 +224,15 @@ def get_func_info_by_name(name):
     func_type = FT_UNK
     func_name = ""
     func_ea = ida_idaapi.BADADDR
-    ret = tinfo.get_tinfo_by_name(name)
+    ret = cto.tinfo.get_tinfo_by_name(name)
     if ret:
         # for APIs
         func_name = name
         func_type = FT_API
         func_ea = idc.get_name_ea_simple(func_name)
     else:
-        for n in tinfo.guess_true_names(name):
-            ret = tinfo.get_tinfo_by_name(n)
+        for n in cto.tinfo.guess_true_names(name):
+            ret = cto.tinfo.get_tinfo_by_name(n)
             if ret:
                 # for APIs
                 func_name = n
@@ -245,7 +244,7 @@ def get_func_info_by_name(name):
     if ret:
         return func_name, func_type, func_ea
     
-    ret = tinfo.get_local_tinfo_by_name(name)
+    ret = cto.tinfo.get_local_tinfo_by_name(name)
     if ret:
         # for a general function with its function definition
         func_ea = idc.get_name_ea_simple(func_name)
@@ -378,7 +377,7 @@ def get_offset_fptr(v):
         #.data:00007FF9648576A8 ; void __stdcall __noreturn FreeLibraryAndExitThread(HMODULE hLibModule, DWORD dwExitCode)
         #.data:00007FF9648576A8 FreeLibraryAndExitThread dq ?  
         else:
-            tif = tinfo.get_tinfo(v)
+            tif = cto.tinfo.get_tinfo(v)
             if tif:
                 target_ea = v
     elif ida_bytes.is_dword(flags):
@@ -389,7 +388,7 @@ def get_offset_fptr(v):
         #.data:00007FF9648576A8 ; void __stdcall __noreturn FreeLibraryAndExitThread(HMODULE hLibModule, DWORD dwExitCode)
         #.data:00007FF9648576A8 FreeLibraryAndExitThread dq ?  
         else:
-            tif = tinfo.get_tinfo(v)
+            tif = cto.tinfo.get_tinfo(v)
             if tif:
                 target_ea = v
     return target_ea
@@ -485,7 +484,7 @@ def get_str(ea, v, string_eas):
         data_type = FT_STR
         data = string_eas[v][1]
     if data_type == FT_VAR:
-        ln, lnnum, keyidx = jump.get_line_no(v, "::`vftable'", chk_cmt=True)
+        ln, lnnum, keyidx = cto.jump.get_line_no(v, "::`vftable'", chk_cmt=True)
         n = ida_name.get_name(v)
         if ln:
             data_type = FT_VTB
@@ -553,7 +552,7 @@ def get_funcptr_ea(ea, import_eas, string_eas):
                     yield target_ea, func_type, i, func_name
                 # mov     dword ptr [esi], offset off_404370 -> sub_xxxxxxxxxxxx
                 elif target_ea != ida_idaapi.BADADDR and target_ea != v:
-                    ln, lnnum, keyidx = jump.get_line_no(v, "::`vftable'", chk_cmt=True)
+                    ln, lnnum, keyidx = cto.jump.get_line_no(v, "::`vftable'", chk_cmt=True)
                     n = ida_name.get_name(v)
                     if ln:
                         target_ea = v
@@ -600,7 +599,7 @@ def get_funcptr_ea(ea, import_eas, string_eas):
                     yield target_ea, func_type, i, func_name
                 # lea     rdi, off_7FF96484ABF8 -> sub_xxxxxxxxxxxx
                 elif target_ea != ida_idaapi.BADADDR and target_ea != v:
-                    ln, lnnum, keyidx = jump.get_line_no(v, "::`vftable'", chk_cmt=True)
+                    ln, lnnum, keyidx = cto.jump.get_line_no(v, "::`vftable'", chk_cmt=True)
                     n = ida_name.get_name(v)
                     if ln:
                         target_ea = v

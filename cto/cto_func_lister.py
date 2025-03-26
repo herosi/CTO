@@ -14,37 +14,30 @@ import ida_auto
 from PyQt5 import QtGui, QtCore, QtWidgets
 import sip
 
-#from modeltest import ModelTest
-
 import os
 import json
 import time
 
-import cto_base
-import syncui
-import qtutils
-import cto_utils
-import icon
-import get_func_relation
-ida_idaapi.require("cto_base")
-ida_idaapi.require("syncui")
-ida_idaapi.require("qtutils")
-ida_idaapi.require("cto_utils")
-ida_idaapi.require("icon")
-ida_idaapi.require("get_func_relation")
+ida_idaapi.require("cto")
+ida_idaapi.require("cto.cto_base")
+ida_idaapi.require("cto.syncui")
+ida_idaapi.require("cto.qtutils")
+ida_idaapi.require("cto.cto_utils")
+ida_idaapi.require("cto.icon")
+ida_idaapi.require("cto.get_func_relation")
 
 if not hasattr(ida_kernwin, "WOPN_NOT_CLOSED_BY_ESC"):
     setattr(ida_kernwin, "WOPN_NOT_CLOSED_BY_ESC", 0x100) # 7.5 lacks the definition
 
-FT_UNK = get_func_relation.FT_UNK
-FT_GEN = get_func_relation.FT_GEN
-FT_LIB = get_func_relation.FT_LIB
-FT_API = get_func_relation.FT_API
-FT_MEM = get_func_relation.FT_MEM
-FT_VAR = get_func_relation.FT_VAR
-FT_STR = get_func_relation.FT_STR
-FT_STO = get_func_relation.FT_STO
-FT_VTB = get_func_relation.FT_VTB
+FT_UNK = cto.get_func_relation.FT_UNK
+FT_GEN = cto.get_func_relation.FT_GEN
+FT_LIB = cto.get_func_relation.FT_LIB
+FT_API = cto.get_func_relation.FT_API
+FT_MEM = cto.get_func_relation.FT_MEM
+FT_VAR = cto.get_func_relation.FT_VAR
+FT_STR = cto.get_func_relation.FT_STR
+FT_STO = cto.get_func_relation.FT_STO
+FT_VTB = cto.get_func_relation.FT_VTB
 
 class MyFilterProxyModel(QtCore.QSortFilterProxyModel):
     itemDataChanged = QtCore.pyqtSignal(QtCore.QModelIndex, str, str, int)
@@ -160,7 +153,7 @@ class MyWidget(QtWidgets.QTreeView):
         self.timer = QtCore.QTimer()
         self.wait_msec = 300
 
-        self.qt_ver = qtutils.get_qver()
+        self.qt_ver = cto.qtutils.get_qver()
         
         self.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
         
@@ -512,7 +505,7 @@ class MyWidget(QtWidgets.QTreeView):
         
         self.after_filtered.emit(text)
         
-class cto_func_lister_t(cto_base.cto_base, ida_kernwin.PluginForm):
+class cto_func_lister_t(cto.cto_base.cto_base, ida_kernwin.PluginForm):
     imports = {}
     imports_ids = {}
     exports = {}
@@ -532,9 +525,9 @@ class cto_func_lister_t(cto_base.cto_base, ida_kernwin.PluginForm):
         
         # init super class
         ida_kernwin.PluginForm.__init__(self)
-        cto_base.cto_base.__init__(self, cto_data, curr_view, debug)
+        cto.cto_base.cto_base.__init__(self, cto_data, curr_view, debug)
         
-        self.qt_ver = qtutils.get_qver()
+        self.qt_ver = cto.qtutils.get_qver()
 	
         # Create tree control
         self.tree = MyWidget()
@@ -544,10 +537,10 @@ class cto_func_lister_t(cto_base.cto_base, ida_kernwin.PluginForm):
         
         self.selected_bg = self.get_selected_bg(0x99999999)
         
-        self.icon = icon.icon_handler(icon_data=icon.g_icon_data_ascii, hexify=True)
+        self.icon = cto.icon.icon_handler(icon_data=cto.icon.g_icon_data_ascii, hexify=True)
         
         # observing "IDA View" or decompiler window
-        class my_ui_hooks_t(syncui.my_ui_hooks_t):
+        class my_ui_hooks_t(cto.syncui.my_ui_hooks_t):
             def _log(self, *msg):
                 if self.v().config.debug:
                     self.v().dbg_print(">>> MyUiHook: %s" % " ".join([str(x) for x in msg]))
@@ -574,7 +567,7 @@ class cto_func_lister_t(cto_base.cto_base, ida_kernwin.PluginForm):
                         self.v().change_widget_icon(bg_change=self.v().config.dark_mode)
                 return refresh_flag
                 
-        class my_view_hooks_t(syncui.my_view_hooks_t):
+        class my_view_hooks_t(cto.syncui.my_view_hooks_t):
             def _log(self, *msg):
                 if self.v().config.debug:
                     self.v().dbg_print(">>> MyViewHook: %s" % " ".join([str(x) for x in msg]))
@@ -741,7 +734,7 @@ class cto_func_lister_t(cto_base.cto_base, ida_kernwin.PluginForm):
             self.PopulateTree()
         else:
             # if ea is string, check string and update string name ...
-            for ea, func_ea, dref_off_ea in get_func_relation.get_dref_belong_to_func(orig_ea, self.vtbl_refs):
+            for ea, func_ea, dref_off_ea in cto.get_func_relation.get_dref_belong_to_func(orig_ea, self.vtbl_refs):
                 self.update_function(func_ea)
                 
             # for general functions
@@ -1586,9 +1579,9 @@ D: enable/disable Debug mode
         ifunc_addr.setData(func_ea, QtCore.Qt.DisplayRole)
         ifunc_addr.setText("%x" % (func_ea))
         ifunc_xref_cnt = QtGui.QStandardItem()
-        ifunc_xref_cnt.setData(cto_utils.count_xref(func_ea), QtCore.Qt.DisplayRole)
+        ifunc_xref_cnt.setData(cto.cto_utils.count_xref(func_ea), QtCore.Qt.DisplayRole)
         ifunc_bb_cnt = QtGui.QStandardItem()
-        ifunc_bb_cnt.setData(cto_utils.count_bbs(func_ea), QtCore.Qt.DisplayRole)
+        ifunc_bb_cnt.setData(cto.cto_utils.count_bbs(func_ea), QtCore.Qt.DisplayRole)
         ifunc_internal_funcs_cnt = QtGui.QStandardItem()
         ifunc_internal_funcs_cnt.setData(self.count_func_type(func_ea, [FT_GEN]), QtCore.Qt.DisplayRole)
         ifunc_uniq_internal_funcs_cnt = QtGui.QStandardItem()

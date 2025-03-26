@@ -6,10 +6,9 @@ import ida_funcs
 import ida_bytes
 import idautils
 
-import loop_detector
-import cto_utils
-ida_idaapi.require("loop_detector")
-ida_idaapi.require("cto_utils")
+ida_idaapi.require("cto")
+ida_idaapi.require("cto.loop_detector")
+ida_idaapi.require("cto.cto_utils")
 
 g_rename_prefix = ('sub_',)
 
@@ -47,7 +46,7 @@ def get_xor_insns(func_ea):
 def find_xor_loop(xor=False, comment=True, rename=False, cmt_prefix="CTO-"):
     to_rename_funcs = {}
     for func_ea, ea in get_xor_insns_all_funcs():
-        ld = loop_detector.loop_detector(func_ea)
+        ld = cto.loop_detector.loop_detector(func_ea)
         bb = ld.get_bb(ea)
         annotation_type = ""
         # skip the candidate for xor loop if the basic block is function start or function end because it is not in a loop.
@@ -73,7 +72,7 @@ def find_xor_loop(xor=False, comment=True, rename=False, cmt_prefix="CTO-"):
                 if func_ea in to_rename_funcs and "xorloop" == to_rename_funcs[func_ea]:
                     rename_flag = False
                 if rename_flag:
-                    xref_cnt = cto_utils.count_xref(ea)
+                    xref_cnt = cto.cto_utils.count_xref(ea)
                     to_rename_funcs[func_ea] = (annotation_type, xref_cnt)
             # set a comment to a xor or a xor loop
             if comment:

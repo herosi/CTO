@@ -7,12 +7,12 @@ import os
 import sys
 import threading
 
-import debug_print
-ida_idaapi.require("debug_print")
+ida_idaapi.require("cto")
+ida_idaapi.require("cto.debug_print")
 
-class cache_data(debug_print.debug):
+class cache_data(cto.debug_print.debug):
     def __init__(self, data_dict=None, config=None, debug=False):
-        #debug_print.debug.__init__(self, debug)
+        #cto.debug_print.debug.__init__(self, debug)
         super(cache_data, self).__init__(debug)
         
         self.idb_name = idc.get_idb_path()

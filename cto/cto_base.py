@@ -12,55 +12,41 @@ import ida_lines
 import traceback
 import os
 import sys
-#import re
-#import threading
 
-import get_func_relation
-import cache_data
-import jump
-import tinfo
-import config_base
-import debug_print
-import comments
-import cto_utils
-import xor_loop_detector
-import notable_mnem_finder
-import notable_const_finder
-import notable_inst_finder
+ida_idaapi.require("cto")
+ida_idaapi.require("cto.get_func_relation")
+ida_idaapi.require("cto.cache_data")
+ida_idaapi.require("cto.jump")
+ida_idaapi.require("cto.tinfo")
+ida_idaapi.require("cto.config_base")
+ida_idaapi.require("cto.debug_print")
+ida_idaapi.require("cto.comments")
+ida_idaapi.require("cto.cto_utils")
+ida_idaapi.require("cto.xor_loop_detector")
+ida_idaapi.require("cto.notable_mnem_finder")
+ida_idaapi.require("cto.notable_const_finder")
+ida_idaapi.require("cto.notable_inst_finder")
+ida_idaapi.require("cto.qtutils")
 
-ida_idaapi.require("get_func_relation")
-ida_idaapi.require("cache_data")
-ida_idaapi.require("jump")
-ida_idaapi.require("tinfo")
-ida_idaapi.require("config_base")
-ida_idaapi.require("debug_print")
-ida_idaapi.require("comments")
-ida_idaapi.require("cto_utils")
-ida_idaapi.require("xor_loop_detector")
-ida_idaapi.require("notable_mnem_finder")
-ida_idaapi.require("notable_const_finder")
-ida_idaapi.require("notable_inst_finder")
-ida_idaapi.require("qtutils")
+FT_UNK = cto.get_func_relation.FT_UNK
+FT_GEN = cto.get_func_relation.FT_GEN
+FT_LIB = cto.get_func_relation.FT_LIB
+FT_API = cto.get_func_relation.FT_API
+FT_MEM = cto.get_func_relation.FT_MEM
+FT_VAR = cto.get_func_relation.FT_VAR
+FT_STR = cto.get_func_relation.FT_STR
+FT_STO = cto.get_func_relation.FT_STO
+FT_VTB = cto.get_func_relation.FT_VTB
 
-FT_UNK = get_func_relation.FT_UNK
-FT_GEN = get_func_relation.FT_GEN
-FT_LIB = get_func_relation.FT_LIB
-FT_API = get_func_relation.FT_API
-FT_MEM = get_func_relation.FT_MEM
-FT_VAR = get_func_relation.FT_VAR
-FT_STR = get_func_relation.FT_STR
-FT_STO = get_func_relation.FT_STO
-FT_VTB = get_func_relation.FT_VTB
-
-class cto_base(debug_print.debug):
+class cto_base(cto.debug_print.debug):
     orig_title = "CTO"
     title = orig_title
     
     def __init__(self, cto_data=None, curr_view=None, debug=False):
         #super(cto_base, self).__init__(debug)
-        debug_print.debug.__init__(self)
+        cto.debug_print.debug.__init__(self)
         
-        self.cmt_obj = comments.comment_t()
+        self.cmt_obj = cto.comments.comment_t()
 
         self.decomp_avail = False
         try:
@@ -82,7 +68,7 @@ class cto_base(debug_print.debug):
                 self.config.debug = debug
             if self.config.debug: self.dbg_print("newly created and cto_data is None")
             self.cto_data = {'cto_data':{}, 'refcnt':1, 'master':id(self), 'config': self.config, 'insts':set([self])}
-            self.cd = cache_data.cache_data(self.cto_data['cto_data'], self.config, self.config.debug)
+            self.cd = cto.cache_data.cache_data(self.cto_data['cto_data'], self.config, self.config.debug)
             result = self.cd.dh.load_data(self.config)
             if result:
                 self.cto_data['cto_data'] = result
@@ -110,13 +96,13 @@ class cto_base(debug_print.debug):
             if self.cto_data['refcnt'] < 1:
                 if self.config.debug: self.dbg_print("took master")
                 self.cto_data['master'] = id(self)
-            self.cd = cache_data.cache_data(self.cto_data['cto_data'], self.config, self.config.debug)
+            self.cd = cto.cache_data.cache_data(self.cto_data['cto_data'], self.config, self.config.debug)
             # if this instance is a slave, 
             if self.cto_data['master'] != id(self):
                 self.cto_data["refcnt"] += 1
         
     # for potable config values for taking over subgraphs
-    class _config(config_base._config_base):
+    class _config(cto.config_base._config_base):
         def __init__(self):
             self.get_default_config()
         
@@ -156,7 +142,7 @@ class cto_base(debug_print.debug):
             
         # get comments and merge them
         cmts = self.cmt_obj.collect_cmts_as_dict()
-        cto_utils.deep_update(self.cto_data["cto_data"]["func_relations"], cmts)
+        cto.cto_utils.deep_update(self.cto_data["cto_data"]["func_relations"], cmts)
         
         # recursive for instance
         for inst in self.cto_data["insts"]:
@@ -165,12 +151,12 @@ class cto_base(debug_print.debug):
         
     def cache_update(self):
         self.cto_data["cto_data"] = {}
-        self.cto_data["cto_data"]["func_relations"], self.cto_data["cto_data"]["import_eas"], self.cto_data["cto_data"]["string_eas"] = get_func_relation.get_func_relations()
+        self.cto_data["cto_data"]["func_relations"], self.cto_data["cto_data"]["import_eas"], self.cto_data["cto_data"]["string_eas"] = cto.get_func_relation.get_func_relations()
         self.cto_data["cto_data"]["paths_cache"] = {}
-        self.cto_data["cto_data"]["dyn_apicalls"] = get_func_relation.get_dyn_apicalls(self.cto_data["cto_data"]["func_relations"])
-        self.cto_data["cto_data"]["opnums"] = get_func_relation.get_opnums(self.cto_data["cto_data"]["func_relations"], "children")
-        self.cto_data["cto_data"]["eps"] = list(get_func_relation.get_entry_points())
-        self.cto_data["cto_data"]["vtbl_refs"] = get_func_relation.get_vtbl_refs(self.cto_data["cto_data"]["func_relations"])
+        self.cto_data["cto_data"]["dyn_apicalls"] = cto.get_func_relation.get_dyn_apicalls(self.cto_data["cto_data"]["func_relations"])
+        self.cto_data["cto_data"]["opnums"] = cto.get_func_relation.get_opnums(self.cto_data["cto_data"]["func_relations"], "children")
+        self.cto_data["cto_data"]["eps"] = list(cto.get_func_relation.get_entry_points())
+        self.cto_data["cto_data"]["vtbl_refs"] = cto.get_func_relation.get_vtbl_refs(self.cto_data["cto_data"]["func_relations"])
         self.cto_data["cto_data"]["internal_caches"] = {}
         
         self.cache_cmt_update()
@@ -185,15 +171,15 @@ class cto_base(debug_print.debug):
             func_type = self.func_relations[ea]["func_type"]
             if func_type == FT_VTB:
                 vtbl = {}
-                for _, _ in get_func_relation.get_vtbl_methods(ea, vtbl):
+                for _, _ in cto.get_func_relation.get_vtbl_methods(ea, vtbl):
                     pass
                 for ea in vtbl:
                     if ea == ida_idaapi.BADADDR:
                         continue
-                    parents = get_func_relation.get_xrefs(ea)
+                    parents = cto.get_func_relation.get_xrefs(ea)
                     self.func_relations[ea] = {"parents":parents, "children":vtbl[ea], "func_type":func_type, "gvars":{}, "strings":{}, "struct_offsets":{}, "vftables":{}, "cmt":{}, "rcmt":{}}
             elif func_type == FT_API:
-                parents = get_func_relation.get_xrefs(ea)
+                parents = cto.get_func_relation.get_xrefs(ea)
                 self.func_relations[ea] = {"parents":parents, "children":{}, "func_type":func_type, "gvars":{}, "strings":{}, "struct_offsets":{}, "vftables":{}, "cmt":{}, "rcmt":{}}
             else:
                 self._partial_cache_update(ea)
@@ -205,23 +191,23 @@ class cto_base(debug_print.debug):
     
     def _partial_cache_update(self, ea):
         # updating a function that the ea belongs to.
-        #f, bbs = get_func_relation.get_func_bbs(ea)
+        #f, bbs = cto.get_func_relation.get_func_bbs(ea)
         f = ida_funcs.get_func(ea)
         if f:
             ea = f.start_ea
-        parents, children, apicalls, gvars, strings, stroff, vtbl = get_func_relation.get_family_members(ea, f, self.import_eas, self.string_eas)
-        func_type = get_func_relation.get_func_type(ea, self.import_eas)
+        parents, children, apicalls, gvars, strings, stroff, vtbl = cto.get_func_relation.get_family_members(ea, f, self.import_eas, self.string_eas)
+        func_type = cto.get_func_relation.get_func_type(ea, self.import_eas)
         self.func_relations[ea] = {"parents":parents, "children":children, "func_type":func_type, "gvars":gvars, "strings":strings, "struct_offsets":stroff, "vftables":vtbl , "cmt":{}, "rcmt":{}}
-        get_func_relation.fix_parent(self.func_relations, self.vtbl_refs, ea)
+        cto.get_func_relation.fix_parent(self.func_relations, self.vtbl_refs, ea)
         cmts = self.cmt_obj.collect_cmts_as_dict(ea)
-        cto_utils.deep_update(self.func_relations, cmts)
+        cto.cto_utils.deep_update(self.func_relations, cmts)
         
         # updating apicalls that are called in the function
         for api_ea in apicalls:
             if api_ea == ida_idaapi.BADADDR:
                 continue
             func_type = apicalls[api_ea]
-            parents = get_func_relation.get_xrefs(api_ea)
+            parents = cto.get_func_relation.get_xrefs(api_ea)
             self.func_relations[api_ea] = {"parents":parents, "children":{}, "func_type":func_type, "gvars":{}, "strings":{}, "struct_offsets":{}, "vftables":{}, "cmt":{}, "rcmt":{}}
             
         # updating vftables that are called in the function
@@ -229,13 +215,13 @@ class cto_base(debug_print.debug):
             if vtbl_ea == ida_idaapi.BADADDR:
                 continue
             func_type = FT_VTB
-            parents = get_func_relation.get_xrefs(vtbl_ea)
+            parents = cto.get_func_relation.get_xrefs(vtbl_ea)
             self.func_relations[vtbl_ea] = {"parents":parents, "children":vtbl[vtbl_ea], "func_type":func_type, "gvars":{}, "strings":{}, "struct_offsets":{}, "vftables":{}, "cmt":{}, "rcmt":{}}
             
         # updating dyn_apicalls table
         if ea in self.dyn_apicalls:
             self.dyn_apicalls.pop(ea)
-        for caller, func_name in get_func_relation.get_dyn_apicalls_partial(self.func_relations, ea):
+        for caller, func_name in cto.get_func_relation.get_dyn_apicalls_partial(self.func_relations, ea):
             self.dyn_apicalls[caller] = func_name
             
         # updating paths cache (just removing paths related to the ea)
@@ -302,14 +288,14 @@ class cto_base(debug_print.debug):
         flag = False
         ida_kernwin.jumpto(ea)
         if ea in self.func_relations and not use_opn:
-            flag = jump.jumpto_name(ea, w)
+            flag = cto.jump.jumpto_name(ea, w)
         elif ea in self.opnums:
             opn = self.opnums[ea]
             if opn >= 0:
-                flag = jump.jumpto_opn(ea, opn, w)
+                flag = cto.jump.jumpto_opn(ea, opn, w)
             else:
                 # find offset line for vftable funcs
-                flag = jump.jumpto_offset(ea, w)
+                flag = cto.jump.jumpto_offset(ea, w)
                 
         # for others such as referenced strings in an instruction
         else:
@@ -322,11 +308,11 @@ class cto_base(debug_print.debug):
                     if ida_ua.o_void == insn.ops[opn].type:
                         opn = -1
                         break
-                    flag = jump.jumpto_opn(ea, opn, w)
+                    flag = cto.jump.jumpto_opn(ea, opn, w)
                     if flag:
                         break
             else:
-                flag = jump.jumpto_name(ea, w)
+                flag = cto.jump.jumpto_name(ea, w)
         return flag
 
     def jumpto(self, ea, use_opn=False):
@@ -346,7 +332,7 @@ class cto_base(debug_print.debug):
     def push_lochist_jump(self, w=None):
         r = False
         try:
-            r = jump.push_lochist_jump(w)
+            r = cto.jump.push_lochist_jump(w)
         except Exception as e:
             exc_type, exc_obj, tb = sys.exc_info()
             lineno = tb.tb_lineno
@@ -367,9 +353,9 @@ class cto_base(debug_print.debug):
         return flag
     
     def check_and_rename_var_decomp(self, w):
-        highlight, vu = jump.get_highlight_decomp(w)
+        highlight, vu = cto.jump.get_highlight_decomp(w)
         if highlight:
-            line = jump.get_current_line_decomp(highlight, vu)
+            line = cto.jump.get_current_line_decomp(highlight, vu)
         else:
             return False
         if line is None:
@@ -378,9 +364,9 @@ class cto_base(debug_print.debug):
         
         self.exec_ida_ui_action("hx:Rename")
         
-        highlight, vu = jump.get_highlight_decomp(w)
+        highlight, vu = cto.jump.get_highlight_decomp(w)
         if highlight:
-            curr_line = jump.get_current_line_decomp(highlight, vu)
+            curr_line = cto.jump.get_current_line_decomp(highlight, vu)
         else:
             return False
         self.dbg_print(curr_line)
@@ -532,15 +518,15 @@ class cto_base(debug_print.debug):
         if selected >= 0:
             callee_ea, func_name = fc.items[selected]
             callee_ea = int(callee_ea, 16)
-            func_type = get_func_relation.get_func_type(callee_ea, self.import_eas)
+            func_type = cto.get_func_relation.get_func_type(callee_ea, self.import_eas)
             cref_type = 0
             optype = idc.get_operand_type(ea, 0)
-            if optype in [ida_ua.o_reg, ida_ua.o_displ, ida_ua.o_phrase] and get_func_relation.is_call_insn(ea):
+            if optype in [ida_ua.o_reg, ida_ua.o_displ, ida_ua.o_phrase] and cto.get_func_relation.is_call_insn(ea):
                 if func_type == FT_GEN:
                     cref_type = ida_xref.fl_CN
                 elif func_type in [FT_LIB, FT_API]:
                     cref_type = ida_xref.fl_CF
-            elif (get_func_relation.is_indirect_jump_insn(ea) and not get_func_relation.get_switch_info(ea)):
+            elif (cto.get_func_relation.is_indirect_jump_insn(ea) and not cto.get_func_relation.get_switch_info(ea)):
                 if func_type == FT_GEN:
                     cref_type = ida_xref.fl_JN
                 elif func_type in [FT_LIB, FT_API]:
@@ -584,9 +570,9 @@ class cto_base(debug_print.debug):
     def apply_tif(self, caller, func_name):
         callee, func_type, opn, _func_name = self.get_callee_info(caller)
         if callee is not None:
-            tif = tinfo.get_tinfo_by_name(func_name)
+            tif = cto.tinfo.get_tinfo_by_name(func_name)
             if tif:
-                tinfo.apply_tinfo_to_ea(tif, caller, opn)
+                cto.tinfo.apply_tinfo_to_ea(tif, caller, opn)
                 
     def update_caller_tif(self, ea, func_name=None):
         callee_ea, func_type, opn, _func_name = self.get_callee_info(ea)
@@ -596,7 +582,7 @@ class cto_base(debug_print.debug):
                 if _func_name:
                     func_name = _func_name
                 else:
-                    func_name, func_type, v = get_func_relation.get_func_info_by_opstr(ea, opn)
+                    func_name, func_type, v = cto.get_func_relation.get_func_info_by_opstr(ea, opn)
             ida_nalt.del_op_tinfo(ea, opn)
             #if ea in self.dyn_apicalls:
             #    self.dyn_apicalls.pop(ea)
@@ -653,7 +639,7 @@ class cto_base(debug_print.debug):
         return self._get_highlighted_name(ea, w)
     
     def get_widget(self):
-        w, wt = cto_utils.get_widget(curr_view=self.curr_view)
+        w, wt = cto.cto_utils.get_widget(curr_view=self.curr_view)
         return w, wt
     
     def get_focus(self, w=None):
@@ -691,14 +677,14 @@ class cto_base(debug_print.debug):
         
     def find_xor_loop(self):
         ida_kernwin.msg("Checking XOR instruction in a loop...%s" % (os.linesep))
-        for func_ea, ea, annotation_type in xor_loop_detector.find_xor_loop(rename=True):
+        for func_ea, ea, annotation_type in cto.xor_loop_detector.find_xor_loop(rename=True):
             ida_kernwin.msg("%x %s: %s, %x: %s%s" % (func_ea, idc.get_name(func_ea), annotation_type, ea, idc.generate_disasm_line(ea, 0), os.linesep))
         self.cache_cmt_update()
         self.refresh_all()
 
     def find_notable_mnem(self):
         ida_kernwin.msg("Checking notable mnemonics...%s" % (os.linesep))
-        c = notable_mnem_finder.notable_mnem_t()
+        c = cto.notable_mnem_finder.notable_mnem_t()
         for func_ea, ea, mnem_type, dst_ea in c.mnem_handlers():
             dst_ea_text = ""
             if dst_ea != ida_idaapi.BADADDR:
@@ -709,7 +695,7 @@ class cto_base(debug_print.debug):
         
     def find_notable_const(self):
         ida_kernwin.msg("Checking notable immediate values...%s" % (os.linesep))
-        c = notable_const_finder.notable_const_t()
+        c = cto.notable_const_finder.notable_const_t()
         for func_ea, const_ea, val, rule_name in c.collect_notable_consts():
             ida_kernwin.msg("%x %s: %x, %x, %s%s" % (func_ea, idc.get_name(func_ea), const_ea, val, rule_name, os.linesep))
         self.cache_cmt_update()
@@ -717,7 +703,7 @@ class cto_base(debug_print.debug):
         
     def find_notable_inst(self):
         ida_kernwin.msg("Checking notable instructions...%s" % (os.linesep))
-        i = notable_inst_finder.notable_inst_t()
+        i = cto.notable_inst_finder.notable_inst_t()
         for func_ea, inst_ea, rule_name, disasm in i.collect_notable_insts():
             ida_kernwin.msg("%x %s: %x: %s: %s%s" % (func_ea, idc.get_name(func_ea), inst_ea, rule_name, disasm, os.linesep))
         self.cache_cmt_update()
@@ -731,12 +717,12 @@ class cto_base(debug_print.debug):
         return self.icon.change_widget_icon(w, icon_data, bg_change, title=self.title)
         
     def is_dark_mode(self, w=None):
-        return qtutils.dark_mode_checker_t.is_dark_mode()
+        return cto.qtutils.dark_mode_checker_t.is_dark_mode()
     
     @staticmethod
     def is_dark_mode_with_main():
-        return qtutils.dark_mode_checker_t.is_dark_mode_with_main()
+        return cto.qtutils.dark_mode_checker_t.is_dark_mode_with_main()
     
     def _is_dark_mode(self, bgcolor):
-        return qtutils.dark_mode_checker_t._is_dark_mode(bgcolor)
+        return cto.qtutils.dark_mode_checker_t._is_dark_mode(bgcolor)
     
