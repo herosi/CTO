@@ -1,5 +1,6 @@
 # How to Install
-Put "cto_plugin.py" and "cto_func_lister_plugin.py" and the "cto" folder including the files and folders under it into the "plugins" folder of IDA's user directory ($IDAUSR).
+Put "cto_plugin.py" and "cto_func_lister_plugin.py" and the "cto" folder including the files and folders under it into the "plugins" folder of IDA's user directory ($IDAUSR).  
+If you use IDA 8.5 or later and want to manage this plugin with a directory, copy "cfl_plugin" and "cto_plugin" to "plugins", move "cto_func_lister_plugin.py" into "cfl_plugin", move "cto_plugin.py" into "cto_plugin" as well as the step above.
 
 See the URL if you don't know about "$IDAUSR".
 https://hex-rays.com/blog/igors-tip-of-the-week-33-idas-user-directory-idausr/
