@@ -14,8 +14,25 @@ ida_idaapi.require("cto.syncdata")
 ida_idaapi.require("cto.qtutils")
 
 
+# for IDA 7.4 or earlier
+try:
+    g_flags = ida_idaapi.PLUGIN_MULTI
+except AttributeError:
+    g_flags = ida_idaapi.PLUGIN_DRAW
+
+# for IDA 7.4 or earlier
+try:
+    g_obj = ida_idaapi.plugmod_t
+except AttributeError:
+    g_obj = object
+
+g_plugmod_flag = False
+if g_flags != ida_idaapi.PLUGIN_DRAW and g_obj != object:
+    g_plugmod_flag = True
+
+
 class cto_func_lister_plugin_t(ida_idaapi.plugin_t):
-    flags = ida_idaapi.PLUGIN_KEEP
+    flags = g_flags
     comment = "CTO Function Lister"
     toolbar_displayed_name = cto.cto_base.cto_base.orig_title
     toolbar_name = toolbar_displayed_name + 'Toolbar'
@@ -40,7 +57,7 @@ class cto_func_lister_plugin_t(ida_idaapi.plugin_t):
             self.v = weakref.ref(plugin)
         
         def activate(self, ctx):
-            self.v().exec_cto_func_lister()
+            self.v().plugin_mod.run(None)
             
         def update(self, ctx):
             return ida_kernwin.AST_ENABLE_ALWAYS
@@ -81,8 +98,67 @@ class cto_func_lister_plugin_t(ida_idaapi.plugin_t):
             ida_kernwin.update_action_icon(self.action_name, self.act_icon_dark)
             ida_kernwin.update_action_icon(self.menu_path + self.wanted_name, self.act_icon_dark)
             
-        return self.flags
+        r = self.flags
+        self.plugin_mod = cfl_plugmod_t()
+        if g_plugmod_flag:
+            r = self.plugin_mod
+        return r
 
+    # for old IDA til 7.6
+    def run(self, arg):
+        self.plugin_mod.run(arg)
+        
+    # for old IDA til 7.6
+    def term(self):
+        self.plugin_mod.term()
+
+    @staticmethod
+    class register_icon(ida_kernwin.UI_Hooks):
+        def updated_actions(self):
+            if ida_kernwin.update_action_icon(cto_func_lister_plugin_t.menu_path + cto_func_lister_plugin_t.wanted_name, cto_func_lister_plugin_t.act_icon_dark):
+                # unhook this if it's successful
+                self.unhook()
+
+
+class cfl_plugmod_t(g_obj):
+    toolbar_name = cto_func_lister_plugin_t.toolbar_name
+    menu_path = cto_func_lister_plugin_t.menu_path
+    action_name = cto_func_lister_plugin_t.action_name
+    act_icon = cto_func_lister_plugin_t.act_icon
+    wanted_name = cto_func_lister_plugin_t.wanted_name
+    comment = cto_func_lister_plugin_t.comment
+    help = cto_func_lister_plugin_t.help
+        
+    def __init__(self):
+        g_obj.__init__(self)
+        self.g = None
+            
+    def __del__(self):
+        self.term()
+        
+    def run(self, arg):
+        self.exec_cto_func_lister()
+        
+    def term(self):
+        if self.g:
+            self.g.Close(0)
+        if hasattr(self.g, "sd"):
+            self.g.sd.close()
+            
+        ida_kernwin.free_custom_icon(self.act_icon)
+        ida_kernwin.detach_action_from_menu(self.menu_path, self.action_name)
+        
+        ida_kernwin.detach_action_from_toolbar(self.toolbar_name, self.action_name)
+        ida_kernwin.delete_toolbar(self.toolbar_name)
+        
+        ida_kernwin.unregister_action(self.action_name)
+        
+        if hasattr(sys.modules["__main__"], "g_cto_func_lister"):
+            delattr(sys.modules["__main__"], "g_cto_func_lister")
+        global g_cto_func_lister
+        del g_cto_func_lister
+        self.g = None
+        
     def exec_cto_func_lister(self):
         global g_cto_func_lister
 
@@ -131,31 +207,6 @@ class cto_func_lister_plugin_t(ida_idaapi.plugin_t):
             setattr(sys.modules["__main__"], "g_cto_func_lister", self.g)
         else:
             sys.modules["__main__"].g_cto_func_lister = self.g
-            
-    def run(self, arg):
-        self.exec_cto_func_lister()
-        
-    def term(self):
-        if self.g:
-            self.g.Close(0)
-        if hasattr(self.g, "sd"):
-            self.g.sd.close()
-            
-        ida_kernwin.free_custom_icon(self.act_icon)
-        ida_kernwin.detach_action_from_menu(self.menu_path, self.action_name)
-        
-        ida_kernwin.detach_action_from_toolbar(self.toolbar_name, self.action_name)
-        ida_kernwin.delete_toolbar(self.toolbar_name)
-        
-        if hasattr(sys.modules["__main__"], "g_cto_func_lister"):
-            delattr(sys.modules["__main__"], "g_cto_func_lister")
-
-    @staticmethod
-    class register_icon(ida_kernwin.UI_Hooks):
-        def updated_actions(self):
-            if ida_kernwin.update_action_icon(cto_func_lister_plugin_t.menu_path + cto_func_lister_plugin_t.wanted_name, cto_func_lister_plugin_t.act_icon_dark):
-                # unhook this if it's successful
-                self.unhook()
 
 
 def PLUGIN_ENTRY():

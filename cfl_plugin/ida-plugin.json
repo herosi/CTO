@@ -1,0 +1,7 @@
+{
+  "IDAMetadataDescriptorVersion": 1,
+  "plugin": {
+    "name": "cto func lister",
+    "entryPoint": "cto_func_lister_plugin.py"
+  }
+}

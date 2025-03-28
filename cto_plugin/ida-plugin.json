@@ -1,0 +1,7 @@
+{
+  "IDAMetadataDescriptorVersion": 1,
+  "plugin": {
+    "name": "cto",
+    "entryPoint": "cto_plugin.py"
+  }
+}
