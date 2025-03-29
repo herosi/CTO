@@ -155,8 +155,9 @@ class cto_plugmod_t(g_obj):
 
         if hasattr(sys.modules["__main__"], "g_cto"):
             delattr(sys.modules["__main__"], "g_cto")
-        global g_cto
-        del g_cto
+        if "g_cto" in globals():
+            global g_cto
+            del g_cto
         self.g = None
 
     def exec_cto(self):

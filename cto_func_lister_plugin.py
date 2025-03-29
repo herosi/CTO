@@ -155,8 +155,9 @@ class cfl_plugmod_t(g_obj):
         
         if hasattr(sys.modules["__main__"], "g_cto_func_lister"):
             delattr(sys.modules["__main__"], "g_cto_func_lister")
-        global g_cto_func_lister
-        del g_cto_func_lister
+        if "g_cto_func_lister" in globals():
+            global g_cto_func_lister
+            del g_cto_func_lister
         self.g = None
         
     def exec_cto_func_lister(self):
