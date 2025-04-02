@@ -1,24 +1,20 @@
-import ida_typeinf
-import ida_nalt
-import ida_idaapi
-import ida_name
-
 import re
 
+import ida_idaapi
+import ida_nalt
+import ida_name
+import ida_typeinf
+
+
 def get_tinfo(ea):
-    tif = ida_typeinf.tinfo_t()
-    result = ida_nalt.get_tinfo(tif, ea)
-    return tif if result else None
+    tinfo = ida_typeinf.tinfo_t()
+    result = ida_nalt.get_tinfo(tinfo, ea)
+    return tinfo if result else None
 
 def get_tinfo_by_name(name):
-    tinfo = None
-    result = ida_typeinf.get_named_type(ida_typeinf.get_idati(), name, 0)
-
-    if result:
-        tinfo = ida_typeinf.tinfo_t()
-        ret = tinfo.deserialize(ida_typeinf.get_idati(), result[1], result[2])
-        if not ret:
-            return None
+    tinfo = ida_typeinf.tinfo_t()
+    if not tinfo.get_named_type(None, name):
+        return None
     return tinfo
 
 def get_local_tinfo_by_name(name, func_flag=True):
@@ -61,8 +57,6 @@ def comp_tifs(name, ea, opn=0):
     return False
 
 def _comp_tifs(tif, tif2):
-    tif2 = get_op_tif(ea, opn)
-    
     if not tif2.is_funcptr():
         tif2.create_ptr(tif2)
     
