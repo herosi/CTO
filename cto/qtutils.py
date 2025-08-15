@@ -11,26 +11,41 @@ def can_use_qt():
         from PyQt5 import QtCore
         from PyQt5 import QtWidgets
         from PyQt5 import QtGui
+    # for ida 9.2 or later
+    except ImportError:
+        from shiboken6 import wrapInstance as wrapinstance
+        from PySide6 import QtCore
+        from PySide6 import QtWidgets
+        from PySide6 import QtGui
     except ModuleNotFoundError:
         return False
     return True
     
 
 def get_qver():
-    from PyQt5 import QtCore
+    try:
+        from PyQt5 import QtCore
+    # for ida 9.2 or later
+    except ImportError:
+        from PySide6 import QtCore
     v = QtCore.qVersion()
     maj, mnr, _ =[int(x) for x in v.split(".")]
     return maj, mnr
 
+
 def get_widget(w, widget_types=None, title=None, max_try=100):
-    
-    import sip
-    from PyQt5 import QtWidgets
+    try:
+        from sip import wrapinstance
+        from PyQt5 import QtWidgets
+    # for ida 9.2 or later
+    except ImportError:
+        from shiboken6 import wrapInstance as wrapinstance
+        from PySide6 import QtWidgets
     
     if widget_types is None:
         widget_types = set([QtWidgets.QWidget,QtWidgets.QSplitter])
         
-    widget = sip.wrapinstance(int(w), QtWidgets.QWidget)
+    widget = wrapinstance(int(w), QtWidgets.QWidget)
     i = 0
     while i < max_try and widget and type(widget) != QtWidgets.QMainWindow:
         if type(widget) in widget_types:
@@ -46,14 +61,20 @@ def get_widget(w, widget_types=None, title=None, max_try=100):
         i += 1
     return widget
 
+
 def get_qmain_window(w, max_try = 100):
     if not can_use_qt():
         return None
-    import sip
-    from PyQt5 import QtWidgets
+    try:
+        from sip import wrapinstance
+        from PyQt5 import QtWidgets
+    # for ida 9.2 or later
+    except ImportError:
+        from shiboken6 import wrapInstance as wrapinstance
+        from PySide6 import QtWidgets
     if w is None:
         return None
-    widget = sip.wrapinstance(int(w), QtWidgets.QWidget)
+    widget = wrapinstance(int(w), QtWidgets.QWidget)
     find_flag = False
     i = 0
     while i < max_try and widget:
@@ -63,10 +84,15 @@ def get_qmain_window(w, max_try = 100):
         i += 1
     return None
 
+
 def find_toolbar(widget, toolbar_name):
     if not can_use_qt():
         return None
-    from PyQt5 import QtWidgets
+    try:
+        from PyQt5 import QtWidgets
+    # for ida 9.2 or later
+    except ImportError:
+        from PySide6 import QtWidgets
     for cwidget in widget.children():
         if type(cwidget) == QtWidgets.QToolBar:
             #print(cwidget.objectName())
@@ -75,10 +101,15 @@ def find_toolbar(widget, toolbar_name):
                 return cwidget
     return None
 
+
 def set_toobar_visible(w, toolbar_name):
     if not can_use_qt():
         return False
-    from PyQt5 import QtCore
+    try:
+        from PyQt5 import QtCore
+    # for ida 9.2 or later
+    except ImportError:
+        from PySide6 import QtCore
     widget = get_qmain_window(w)
     if widget:
         tb_widget = find_toolbar(widget, toolbar_name)
@@ -88,6 +119,7 @@ def set_toobar_visible(w, toolbar_name):
             return True
         widget.addToolBar(QtCore.Qt.TopToolBarArea, tb_widget)
     return False
+
 
 class enable_toolbar_t(ida_kernwin.UI_Hooks):
     def __init__(self, toolbar_name):
@@ -116,6 +148,9 @@ class dark_mode_checker_t(object):
     def get_main_window():
         try:
             from PyQt5 import QtWidgets
+        # for ida 9.2 or later
+        except ImportError:
+            from PySide6 import QtWidgets
         except ModuleNotFoundError:
             return None
         
@@ -147,6 +182,9 @@ class dark_mode_checker_t(object):
     def is_dark_mode_with_main():
         try:
             from PyQt5 import QtWidgets
+        # for ida 9.2 or later
+        except ImportError:
+            from PySide6 import QtWidgets
         except ModuleNotFoundError:
             return False
 
@@ -165,15 +203,21 @@ class dark_mode_checker_t(object):
             return bgcolor
         
         try:
-            import sip
+            from sip import wrapinstance
             from PyQt5 import QtCore
             from PyQt5 import QtWidgets
             from PyQt5 import QtGui
+        # for ida 9.2 or later
+        except ImportError:
+            from shiboken6 import wrapInstance as wrapinstance
+            from PySide6 import QtCore
+            from PySide6 import QtWidgets
+            from PySide6 import QtGui
         except ModuleNotFoundError:
             return bgcolor
         
         if str(w).startswith("<Swig Object of type 'TWidget *' at") and str(type(w)) in ["<class 'SwigPyObject'>", "<type 'SwigPyObject'>"]: # type: for py2, class: for py3
-            widget = sip.wrapinstance(int(w), QtWidgets.QWidget)
+            widget = wrapinstance(int(w), QtWidgets.QWidget)
         else:
             widget = w
             

@@ -57,8 +57,14 @@ class icon_handler(object):
             from PyQt5 import QtCore
             from PyQt5 import QtWidgets
             from PyQt5 import QtGui
+        # for ida 9.2 or later
         except ImportError:
-            return None
+            try:
+                from PySide6 import QtCore
+                from PySide6 import QtWidgets
+                from PySide6 import QtGui
+            except ImportError:
+                return None
         
         icon_image = QtGui.QImage()
         icon_image.loadFromData(icon_data, 'PNG')
@@ -98,12 +104,17 @@ class icon_handler(object):
             return False
         
         try:
-            import sip
             from PyQt5 import QtCore
             from PyQt5 import QtWidgets
             from PyQt5 import QtGui
+        # for ida 9.2 or later
         except ImportError:
-            return False
+            try:
+                from PySide6 import QtCore
+                from PySide6 import QtWidgets
+                from PySide6 import QtGui
+            except ImportError:
+                return False
         
         pixmap = icon_handler.icon_bg_change(icon_data, bg_change)
         if pixmap:

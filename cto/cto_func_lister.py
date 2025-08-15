@@ -11,8 +11,19 @@ import idc
 import idautils
 import ida_auto
 
-from PyQt5 import QtGui, QtCore, QtWidgets
-import sip
+try:
+    from PyQt5 import QtGui, QtCore, QtWidgets
+# for ida 9.2 or later
+except ImportError:
+    from PySide6 import QtGui, QtCore, QtWidgets
+
+try:
+    from PyQt5.QtCore import pyqtSlot as Slot
+    from PyQt5.QtCore import pyqtSignal as Signal
+# for ida 9.2 or later
+except ImportError:
+    from PySide6.QtCore import Slot
+    from PySide6.QtCore import Signal
 
 import os
 import json
@@ -40,7 +51,7 @@ FT_STO = cto.get_func_relation.FT_STO
 FT_VTB = cto.get_func_relation.FT_VTB
 
 class MyFilterProxyModel(QtCore.QSortFilterProxyModel):
-    itemDataChanged = QtCore.pyqtSignal(QtCore.QModelIndex, str, str, int)
+    itemDataChanged = Signal(QtCore.QModelIndex, str, str, int)
     
     def __init__(self, parent=None):
         super(MyFilterProxyModel, self).__init__(parent)
@@ -101,7 +112,7 @@ class MyFilterProxyModel(QtCore.QSortFilterProxyModel):
         return res
 
 class limit_keywords_dialog(QtWidgets.QDialog):
-    state_changed = QtCore.pyqtSignal(str)
+    state_changed = Signal(str)
     def __init__(self, parent=None):
         super().__init__()
         self.setAttribute(QtCore.Qt.WA_DeleteOnClose)
@@ -110,7 +121,7 @@ class limit_keywords_dialog(QtWidgets.QDialog):
         self.setLayout(self.v)
         self.key_cboxes = {}
         
-    @QtCore.pyqtSlot(dict)
+    @Slot(dict)
     def init_data_and_show(self, keywords):
         self.keywords = keywords
         for k in keywords:
@@ -137,12 +148,12 @@ class limit_keywords_dialog(QtWidgets.QDialog):
         self.state_changed.emit("")
     
 class MyWidget(QtWidgets.QTreeView):
-    key_pressed = QtCore.pyqtSignal(QtGui.QKeyEvent)
-    current_changed = QtCore.pyqtSignal(QtCore.QModelIndex, QtCore.QModelIndex)
-    state_changed = QtCore.pyqtSignal(str)
-    after_filtered = QtCore.pyqtSignal(str)
-    item_changed = QtCore.pyqtSignal(QtCore.QModelIndex, str, str)
-    builtin_exec = QtCore.pyqtSignal(str)
+    key_pressed = Signal(QtGui.QKeyEvent)
+    current_changed = Signal(QtCore.QModelIndex, QtCore.QModelIndex)
+    state_changed = Signal(str)
+    after_filtered = Signal(str)
+    item_changed = Signal(QtCore.QModelIndex, str, str)
+    builtin_exec = Signal(str)
     
     def __init__(self):
         #super(MyWidget, self).__init__(self)
@@ -298,7 +309,7 @@ class MyWidget(QtWidgets.QTreeView):
         self.builtin_exec.emit(script_name)
         
     # action for filter preset
-    @QtCore.pyqtSlot(str, bool, bool, list)
+    @Slot(str, bool, bool, list)
     def set_filter_rule(self, rule, regex, cs, keywords):
         if regex:
             self.regex_box.setCheckState(QtCore.Qt.Checked)
@@ -387,7 +398,11 @@ class MyWidget(QtWidgets.QTreeView):
         
         flag = True
         key = key_event.key()
-        state = int(key_event.modifiers())
+        try:
+            state = int(key_event.modifiers())
+        # for PySide6 (IDA >= 9.2)
+        except TypeError:
+            state = int(key_event.modifiers().value)
         c = chr(key & 0xff)
         
         # if a user editing an item like renaming a function, do nothing.
@@ -1167,7 +1182,11 @@ class cto_func_lister_t(cto.cto_base.cto_base, ida_kernwin.PluginForm):
         
         if self.config.debug: self.dbg_print('key pressed: %x, %x' % (key_event.key(), int(key_event.modifiers())))
         key = key_event.key()
-        state = int(key_event.modifiers())
+        try:
+            state = int(key_event.modifiers())
+        # for PySide6 (IDA >= 9.2)
+        except TypeError:
+            state = int(key_event.modifiers().value)
         c = chr(key & 0xff)
         
         w, wt = self.get_widget()
@@ -1381,8 +1400,12 @@ D: enable/disable Debug mode
         # adjust header length manually
         #self.tree.header().setCascadingSectionResizes(True)
         self.tree.header().setMinimumSectionSize(10)
-        self.tree.header().setSectionResizeMode(0, self.tree.header().Interactive)
-        #self.tree.header().setSectionResizeMode(1, self.tree.header().Interactive)
+        try:
+            rmode = self.tree.header().Interactive
+        # for PySide6 (IDA >= 9.2)
+        except AttributeError:
+            rmode = self.tree.header().ResizeMode.Interactive
+        self.tree.header().setSectionResizeMode(0, rmode)
         self.tree.header().setStretchLastSection(False)
         self.tree.header().resizeSection(0, 180)
         #for i in range(1,8):
