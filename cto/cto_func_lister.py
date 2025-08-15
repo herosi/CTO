@@ -162,6 +162,8 @@ class MyWidget(QtWidgets.QTreeView):
         self.keywords = {}
         self.h = limit_keywords_dialog()
         self.timer = QtCore.QTimer()
+        # dummy signal connection for the first execution
+        self.timer.timeout.connect(lambda a="": self.filterChanged(a))
         self.wait_msec = 300
 
         self.qt_ver = cto.qtutils.get_qver()
