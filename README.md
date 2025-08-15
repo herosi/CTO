@@ -23,7 +23,7 @@ Presentation slides
 https://vblocalhost.com/uploads/2021/09/VB2021-14.pdf
 
 ## Requirements
-- IDA Pro 7.4 or later (I tested on 7.4 SP1, 8.0, 8.2 SP1, 8.4 SP2, 9.0, and 9.0 SP1)
+- IDA Pro 7.4 or later (I tested on 7.4 SP1, 8.0, 8.2 SP1, 8.4 SP2, 9.0, 9.0 SP1, 9.1, and 9.2 Beta 3)
 - Python 3.x (I tested on Python 3.8 to 3.12)
 
 You will need at least IDA Pro 7.4 or later because of the APIs that I use.
@@ -67,7 +67,7 @@ Check the articles showed in the top of this file as well.
 
 ## Note
 CTO is still under development and it is unstable yet. I might change the data structure drastically.
-CTO accesses sensitive internal data structure of IDA such as low level APIs and PyQt5. And it might cause a crash of IDA.
+CTO accesses sensitive internal data structure of IDA such as low level APIs and PyQt5/PySide6. And it might cause a crash of IDA.
 Do not use this in important situations. I don't take responsibility for any damage or any loss caused by the use of this.
 
 I'm not a programmer. I'm a malware analyst. Please do not expect product-level code.
